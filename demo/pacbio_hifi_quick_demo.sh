@@ -50,7 +50,7 @@ OUTPUT_VCF_FILE_PATH="output.vcf.gz"
 #     --ctg_start 80000000 \
 #     --ctg_end 80100000
 
-CS=/autofs/bal34/lchen/home/ClairST/github
+CS=/autofs/bal34/lchen/home/ClairST/ClairS-TO
 PYPY=/autofs/bal33/zxzheng/env/conda/envs/clair-somatic/bin/pypy3
 
 ${CS}/run_clairsto \
