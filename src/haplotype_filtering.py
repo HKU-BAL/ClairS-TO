@@ -462,7 +462,7 @@ def haplotype_filter(args):
             f.write(' '.join(info_list) + '\n')
 
     file_directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    main_entry = os.path.join(file_directory, "clairsto.py")
+    main_entry = os.path.join(file_directory, "clairs_to.py")
 
     parallel_command = "{} -C ' ' -j{} {} {} haplotype_filtering".format(args.parallel, threads_low, args.pypy3, main_entry)
     parallel_command += " --ctg_name {1}"

@@ -39,7 +39,7 @@ deep_learning_folder = [
     "call_variants",
 ]
 
-REPO_NAME = "clairsto"
+REPO_NAME = "clairs_to"
 data_preprocess_folder = [
     "extract_candidates_calling",
     "create_tensor_pileup_calling",
@@ -68,9 +68,9 @@ def print_help_messages():
     from textwrap import dedent
     print(dedent("""\
         {0} submodule invocator:
-            Usage: python clairsto.py [submodule] [options of the submodule]
+            Usage: python clairs_to.py [submodule] [options of the submodule]
         Available data preparation submodules:\n{1}
-        Available clairsto submodules:\n{2}
+        Available clairs_to submodules:\n{2}
         """.format(
             REPO_NAME,
             "\n".join("          - %s" % submodule_name for submodule_name in data_preprocess_folder),

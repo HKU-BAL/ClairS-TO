@@ -47,8 +47,8 @@ OUTPUT_VCF_FILE_PATH="output.vcf.gz"
 docker run -it \
   -v ${INPUT_DIR}:${INPUT_DIR} \
   -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
-  hkubal/clairsto:latest \
-  /opt/bin/run_clairsto \
+  hkubal/clairs-to:latest \
+  /opt/bin/run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/${TUMOR_BAM} \
   --ref_fn ${INPUT_DIR}/${REF} \
   --threads 4 \
@@ -63,8 +63,8 @@ docker run -it \
 docker run -it \
   -v ${INPUT_DIR}:${INPUT_DIR} \
   -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
-  hkubal/clairsto:latest \
-  python3 /opt/bin/clairsto.py compare_vcf \
+  hkubal/clairs-to:latest \
+  python3 /opt/bin/clairs_to.py compare_vcf \
      --truth_vcf_fn ${INPUT_DIR}/${BASELINE_VCF_FILE_PATH} \
      --input_vcf_fn ${OUTPUT_DIR}/${OUTPUT_VCF_FILE_PATH} \
      --bed_fn ${INPUT_DIR}/${BASELINE_BED_FILE_PATH} \
@@ -105,7 +105,7 @@ jmcdani20/hap.py:v0.3.12 /opt/hap.py/bin/som.py \
 
 ```bash
 cd ${HOME}
-wget "https://raw.githubusercontent.com/HKU-BAL/clairsto/main/demo/pacbio_hifi_quick_demo.sh"
+wget "https://raw.githubusercontent.com/HKU-BAL/clairs-to/main/demo/pacbio_hifi_quick_demo.sh"
 chmod +x pacbio_hifi_quick_demo.sh
 ./pacbio_hifi_quick_demo.sh
 ```

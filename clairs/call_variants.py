@@ -121,7 +121,7 @@ def output_vcf_from_probability(
         probabilities_nc,
         probabilities_ng,
         probabilities_nt,
-        likelihood_data,
+        likelihood_data_info_list,
         output_config=None,
         vcf_writer=None
 ):
@@ -153,47 +153,18 @@ def output_vcf_from_probability(
     probabilities_is_ng = probabilities_ng[1]
     probabilities_is_nt = probabilities_nt[1]
 
-    likelihood_a_na = likelihood_data[:10]
-    likelihood_c_nc = likelihood_data[10:20]
-    likelihood_g_ng = likelihood_data[20:30]
-    likelihood_t_nt = likelihood_data[30:40]
-
-    likelihood_a_points = likelihood_data[40:41].flatten()[:-1]
-    likelihood_na_points = likelihood_data[41:42].flatten()[:-1]
-    likelihood_c_points = likelihood_data[42:43].flatten()[:-1]
-    likelihood_nc_points = likelihood_data[43:44].flatten()[:-1]
-    likelihood_g_points = likelihood_data[44:45].flatten()[:-1]
-    likelihood_ng_points = likelihood_data[45:46].flatten()[:-1]
-    likelihood_t_points = likelihood_data[46:47].flatten()[:-1]
-    likelihood_nt_points = likelihood_data[47:48].flatten()[:-1]
-
-    likelihood_a_points_with_zero = np.insert(likelihood_a_points, 0, 0)
-    likelihood_na_points_with_zero = np.insert(likelihood_na_points, 0, 0)
-    likelihood_a_points_with_zero_one = np.insert(likelihood_a_points_with_zero, len(likelihood_a_points_with_zero),
-                                                  1)
-    likelihood_na_points_with_zero_one = np.insert(likelihood_na_points_with_zero,
-                                                   len(likelihood_na_points_with_zero), 1)
-
-    likelihood_c_points_with_zero = np.insert(likelihood_c_points, 0, 0)
-    likelihood_nc_points_with_zero = np.insert(likelihood_nc_points, 0, 0)
-    likelihood_c_points_with_zero_one = np.insert(likelihood_c_points_with_zero, len(likelihood_c_points_with_zero),
-                                                  1)
-    likelihood_nc_points_with_zero_one = np.insert(likelihood_nc_points_with_zero,
-                                                   len(likelihood_nc_points_with_zero), 1)
-
-    likelihood_g_points_with_zero = np.insert(likelihood_g_points, 0, 0)
-    likelihood_ng_points_with_zero = np.insert(likelihood_ng_points, 0, 0)
-    likelihood_g_points_with_zero_one = np.insert(likelihood_g_points_with_zero, len(likelihood_g_points_with_zero),
-                                                  1)
-    likelihood_ng_points_with_zero_one = np.insert(likelihood_ng_points_with_zero,
-                                                   len(likelihood_ng_points_with_zero), 1)
-
-    likelihood_t_points_with_zero = np.insert(likelihood_t_points, 0, 0)
-    likelihood_nt_points_with_zero = np.insert(likelihood_nt_points, 0, 0)
-    likelihood_t_points_with_zero_one = np.insert(likelihood_t_points_with_zero, len(likelihood_t_points_with_zero),
-                                                  1)
-    likelihood_nt_points_with_zero_one = np.insert(likelihood_nt_points_with_zero,
-                                                   len(likelihood_nt_points_with_zero), 1)
+    likelihood_a_na = likelihood_data_info_list[0]
+    likelihood_c_nc = likelihood_data_info_list[1]
+    likelihood_g_ng = likelihood_data_info_list[2]
+    likelihood_t_nt = likelihood_data_info_list[3]
+    likelihood_a_points_with_zero_one = likelihood_data_info_list[4]
+    likelihood_na_points_with_zero_one = likelihood_data_info_list[5]
+    likelihood_c_points_with_zero_one = likelihood_data_info_list[6]
+    likelihood_nc_points_with_zero_one = likelihood_data_info_list[7]
+    likelihood_g_points_with_zero_one = likelihood_data_info_list[8]
+    likelihood_ng_points_with_zero_one = likelihood_data_info_list[9]
+    likelihood_t_points_with_zero_one = likelihood_data_info_list[10]
+    likelihood_nt_points_with_zero_one = likelihood_data_info_list[11]
 
     a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
     na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
@@ -509,8 +480,65 @@ def call_variants_from_probability(args):
     else:
         fo = sys.stdin
 
-    likelihood_data_fn = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'likelihood_matrixs', platform, '10_equal_sample_division.txt')
+    likelihood_data_fn = args.likelihood_matrix_data
     likelihood_data = np.loadtxt(likelihood_data_fn)
+
+    likelihood_data_info_list = []
+
+    likelihood_a_na = likelihood_data[:10]
+    likelihood_c_nc = likelihood_data[10:20]
+    likelihood_g_ng = likelihood_data[20:30]
+    likelihood_t_nt = likelihood_data[30:40]
+
+    likelihood_a_points = likelihood_data[40:41].flatten()[:-1]
+    likelihood_na_points = likelihood_data[41:42].flatten()[:-1]
+    likelihood_c_points = likelihood_data[42:43].flatten()[:-1]
+    likelihood_nc_points = likelihood_data[43:44].flatten()[:-1]
+    likelihood_g_points = likelihood_data[44:45].flatten()[:-1]
+    likelihood_ng_points = likelihood_data[45:46].flatten()[:-1]
+    likelihood_t_points = likelihood_data[46:47].flatten()[:-1]
+    likelihood_nt_points = likelihood_data[47:48].flatten()[:-1]
+
+    likelihood_a_points_with_zero = np.insert(likelihood_a_points, 0, 0)
+    likelihood_na_points_with_zero = np.insert(likelihood_na_points, 0, 0)
+    likelihood_a_points_with_zero_one = np.insert(likelihood_a_points_with_zero, len(likelihood_a_points_with_zero),
+                                                  1)
+    likelihood_na_points_with_zero_one = np.insert(likelihood_na_points_with_zero,
+                                                   len(likelihood_na_points_with_zero), 1)
+
+    likelihood_c_points_with_zero = np.insert(likelihood_c_points, 0, 0)
+    likelihood_nc_points_with_zero = np.insert(likelihood_nc_points, 0, 0)
+    likelihood_c_points_with_zero_one = np.insert(likelihood_c_points_with_zero, len(likelihood_c_points_with_zero),
+                                                  1)
+    likelihood_nc_points_with_zero_one = np.insert(likelihood_nc_points_with_zero,
+                                                   len(likelihood_nc_points_with_zero), 1)
+
+    likelihood_g_points_with_zero = np.insert(likelihood_g_points, 0, 0)
+    likelihood_ng_points_with_zero = np.insert(likelihood_ng_points, 0, 0)
+    likelihood_g_points_with_zero_one = np.insert(likelihood_g_points_with_zero, len(likelihood_g_points_with_zero),
+                                                  1)
+    likelihood_ng_points_with_zero_one = np.insert(likelihood_ng_points_with_zero,
+                                                   len(likelihood_ng_points_with_zero), 1)
+
+    likelihood_t_points_with_zero = np.insert(likelihood_t_points, 0, 0)
+    likelihood_nt_points_with_zero = np.insert(likelihood_nt_points, 0, 0)
+    likelihood_t_points_with_zero_one = np.insert(likelihood_t_points_with_zero, len(likelihood_t_points_with_zero),
+                                                  1)
+    likelihood_nt_points_with_zero_one = np.insert(likelihood_nt_points_with_zero,
+                                                   len(likelihood_nt_points_with_zero), 1)
+
+    likelihood_data_info_list.append(likelihood_a_na)
+    likelihood_data_info_list.append(likelihood_c_nc)
+    likelihood_data_info_list.append(likelihood_g_ng)
+    likelihood_data_info_list.append(likelihood_t_nt)
+    likelihood_data_info_list.append(likelihood_a_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_na_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_c_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_nc_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_g_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_ng_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_t_points_with_zero_one)
+    likelihood_data_info_list.append(likelihood_nt_points_with_zero_one)
 
     for row_id, row in enumerate(fo):
         row = row.rstrip().split('\t')
@@ -537,7 +565,7 @@ def call_variants_from_probability(args):
             probabilities_nc,
             probabilities_ng,
             probabilities_nt,
-            likelihood_data,
+            likelihood_data_info_list,
             output_config=output_config,
             vcf_writer=vcf_writer,
         )
@@ -583,6 +611,9 @@ def main():
 
     parser.add_argument('--show_ref', action='store_true',
                         help="Show reference calls (0/0) in VCF file")
+
+    parser.add_argument('--likelihood_matrix_data', type=str, default=None,
+                        help="Likelihood matrix data for Bayes' theorem")
 
     # options for advanced users
     parser.add_argument('--enable_indel_calling', type=str2bool, default=0,

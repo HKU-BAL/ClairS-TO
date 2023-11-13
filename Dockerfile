@@ -29,15 +29,14 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Example command:
-# $ git clone https://github.com/HKU-BAL/ClairS.git
-# $ cd ClairS
-# $ cd deepvariant
-# $ docker build -f ./Dockerfile -t hkubal/clairs:latest .
-# $ docker run -it hkubal/clairs:latest /opt/bin/run_clairs --help
+# $ git clone https://github.com/HKU-BAL/ClairS-TO.git
+# $ cd ClairS-TO
+# $ docker build -f ./Dockerfile -t hkubal/clairs-to:latest .
+# $ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
 
 FROM ubuntu:16.04
 
-ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 PATH=/opt/bin:/opt/conda/bin:$PATH
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 PATH=/opt/bin:/opt/micromamba/bin:$PATH
 
 # update ubuntu packages
 RUN apt-get update --fix-missing && \
@@ -53,29 +52,36 @@ RUN apt-get update --fix-missing && \
 
 WORKDIR /opt/bin
 
-# install anaconda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
-    rm Miniconda3-latest-Linux-x86_64.sh && \
-    conda config --add channels defaults && \
-    conda config --add channels bioconda && \
-    conda config --add channels conda-forge && \
-    conda create -n clairs -c pytorch -c conda-forge -c bioconda clair3 pytorch tqdm torchinfo -y && \
-    rm -rf /opt/conda/pkgs/* && \
+# install micromamba
+RUN wget --quiet -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/api/micromamba/linux-64/latest && \
+    tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 && \
+    mkdir -p /opt/micromamba/bin && \
+    mv ./bin/micromamba /opt/micromamba/bin/micromamba && \
+    /opt/micromamba/bin/micromamba shell init -s bash -p /opt/micromamba && \
+    export MAMBA_ROOT_PREFIX=/opt/micromamba && \
+    rm linux-64_micromamba-1.5.1-2.tar.bz2 && \
+    rm -r info/ && \
+    rm -r bin/ && \
+    micromamba create -n clairs-to -c pytorch -c conda-forge -c bioconda clair3 einops pytorch tqdm torchinfo -y && \
+    rm -rf /opt/micromamba/pkgs/* && \
     rm -rf /root/.cache/pip
 
-ENV PATH /opt/conda/envs/clairs/bin:$PATH
-ENV CONDA_DEFAULT_ENV clairs
+ENV PATH /opt/micromamba/envs/clairs-to/bin:$PATH
+ENV CONDA_DEFAULT_ENV clairs-to
 
 COPY . .
 
-RUN /bin/bash -c "source activate clairs" && cd /opt/bin/src/realign && \
+RUN cd /opt/bin/src/realign && \
     g++ -std=c++14 -O1 -shared -fPIC -o realigner ssw_cpp.cpp ssw.c realigner.cpp && \
     g++ -std=c++11 -shared -fPIC -o debruijn_graph -O3 debruijn_graph.cpp && \
-    wget http://www.bio8.cs.hku.hk/clairs/models/clairs_models.tar.gz	 -P /opt/models && \
-    mkdir -p /opt/conda/envs/clairs/bin/clairs_models && \
-    tar -zxvf /opt/models/clairs_models.tar.gz -C /opt/conda/envs/clairs/bin/clairs_models && \
-    rm /opt/models/clairs_models.tar.gz && \
+    wget http://www.bio8.cs.hku.hk/clairs-to/models/clairs-to_models.tar.gz	-P /opt/models && \
+    wget http://www.bio8.cs.hku.hk/clairs-to/databases/clairs-to_databases.tar.gz -P /opt/databases && \
+    mkdir -p /opt/micromamba/envs/clairs-to/bin/clairs-to_models && \
+    mkdir -p /opt/micromamba/envs/clairs-to/bin/clairs-to_databases && \
+    tar -zxvf /opt/models/clairs-to_models.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_models && \
+    tar -zxvf /opt/databases/clairs-to_databases.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_databases && \
+    rm /opt/models/clairs-to_models.tar.gz && \
+    rm /opt/databases/clairs-to_databases.tar.gz && \
     echo 'will cite' | parallel --citation || true \
-    echo "source activate clairs" > ~/.bashrc
+    echo "micromamba activate clairs-to" > ~/.bashrc
 

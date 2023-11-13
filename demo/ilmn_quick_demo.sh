@@ -24,37 +24,11 @@ BASELINE_VCF_FILE_PATH="SEQC2_high-confidence_sSNV_in_HC_regions_v1.2_chr17.vcf.
 BASELINE_BED_FILE_PATH="SEQC2_High-Confidence_Regions_v1.2_chr17.bed"
 OUTPUT_VCF_FILE_PATH="output.vcf.gz"
 
-#docker run -it \
-#  -v ${INPUT_DIR}:${INPUT_DIR} \
-#  -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
-#  hkubal/clairsto:latest \
-#  /opt/bin/run_clairsto \
-#  --tumor_bam_fn ${INPUT_DIR}/${TUMOR_BAM} \
-#  --ref_fn ${INPUT_DIR}/${REF} \
-#  --threads 4 \
-#  --platform ilmn \
-#  --output_dir ${OUTPUT_DIR} \
-#  --region chr17:80000000-80100000
-#
-##Benchmarking
-#docker run -it \
-#  -v ${INPUT_DIR}:${INPUT_DIR} \
-#  -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
-#  hkubal/clairsto:latest \
-#  python3 /opt/bin/clairsto.py compare_vcf \
-#     --truth_vcf_fn ${INPUT_DIR}/${BASELINE_VCF_FILE_PATH} \
-#     --input_vcf_fn ${OUTPUT_DIR}/${OUTPUT_VCF_FILE_PATH} \
-#     --bed_fn ${INPUT_DIR}/${BASELINE_BED_FILE_PATH} \
-#     --output_dir ${OUTPUT_DIR}/benchmark \
-#     --input_filter_tag 'PASS' \
-#     --ctg_name chr17 \
-#     --ctg_start 80000000 \
-#     --ctg_end 80100000
-
-CS=/autofs/bal34/lchen/home/ClairST/ClairS-TO
-PYPY=/autofs/bal33/zxzheng/env/conda/envs/clair-somatic/bin/pypy3
-
-${CS}/run_clairsto \
+docker run -it \
+  -v ${INPUT_DIR}:${INPUT_DIR} \
+  -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
+  hkubal/clairs-to:latest \
+  /opt/bin/run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/${TUMOR_BAM} \
   --ref_fn ${INPUT_DIR}/${REF} \
   --threads 4 \
@@ -63,7 +37,11 @@ ${CS}/run_clairsto \
   --region chr17:80000000-80100000
 
 #Benchmarking
-time ${PYPY} ${CS}/clairsto.py compare_vcf \
+docker run -it \
+  -v ${INPUT_DIR}:${INPUT_DIR} \
+  -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
+  hkubal/clairs-to:latest \
+  python3 /opt/bin/clairs_to.py compare_vcf \
      --truth_vcf_fn ${INPUT_DIR}/${BASELINE_VCF_FILE_PATH} \
      --input_vcf_fn ${OUTPUT_DIR}/${OUTPUT_VCF_FILE_PATH} \
      --bed_fn ${INPUT_DIR}/${BASELINE_BED_FILE_PATH} \

@@ -25,7 +25,7 @@ Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilize
 - [Installation](#installation)
   - [Option 1. Docker pre-built image](#option-1--docker-pre-built-image)
   - [Option 2. Singularity](#option-2-singularity)
-  - [Option 3. Build an anaconda virtual environment](#option-3-build-an-anaconda-virtual-environment)
+  - [Option 3. Build an anaconda (or micromamba) virtual environment](#option-3-build-an-anaconda-or-micromamba-virtual-environment)
   - [Option 4. Docker Dockerfile](#option-4-docker-dockerfile)
 - [Quick Demo](#quick-demo)
 - [Pre-trained Models](#pre-trained-models)
@@ -51,7 +51,7 @@ Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilize
 After following [installation](#installation), you can run ClairS-TO with one command:
 
 ```bash
-./run_clairsto -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy
 
 ## Final output file: output/output.vcf.gz
 ```
@@ -79,7 +79,7 @@ ClairS-TO trained both Affirmational and Negational models using GIAB samples, a
 
 ### Option 1.  Docker pre-built image
 
-A pre-built docker image is available at [DockerHub](https://hub.docker.com/r/hkubal/clairsto). 
+A pre-built docker image is available at [DockerHub](https://hub.docker.com/r/hkubal/clairs-to). 
 
 **Caution**: Absolute path is needed for both `INPUT_DIR` and `OUTPUT_DIR` in docker. 
 
@@ -87,8 +87,8 @@ A pre-built docker image is available at [DockerHub](https://hub.docker.com/r/hk
 docker run -it \
   -v ${INPUT_DIR}:${INPUT_DIR} \
   -v ${OUTPUT_DIR}:${OUTPUT_DIR} \
-  hkubal/clairsto:latest \
-  /opt/bin/run_clairsto \
+  hkubal/clairs-to:latest \
+  /opt/bin/run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
@@ -112,23 +112,23 @@ conda create -n singularity-env -c conda-forge singularity -y
 conda activate singularity-env
 
 # singularity pull docker pre-built image
-singularity pull docker://hkubal/clairsto:latest
+singularity pull docker://hkubal/clairs-to:latest
 
 # run the sandbox like this afterward
 singularity exec \
   -B ${INPUT_DIR},${OUTPUT_DIR} \
-  clairsto_latest.sif \
-  hkubal/clairsto:latest \
-  /opt/bin/run_clairsto \
+  clairs-to_latest.sif \
+  hkubal/clairs-to:latest \
+  /opt/bin/run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
   --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR} \                 ## output path prefix
-  --conda_prefix /opt/conda/envs/clairsto
+  --conda_prefix /opt/conda/envs/clairs-to
 ```
 
-### Option 3. Build an anaconda virtual environment
+### Option 3. Build an anaconda (or micromamba) virtual environment
 
 Check here to install the tools step by step.
 
@@ -142,13 +142,32 @@ chmod +x ./Miniconda3-latest-Linux-x86_64.sh
 ./Miniconda3-latest-Linux-x86_64.sh
 ```
 
-**Install ClairS-TO using anaconda step by step:**
+**Micromamba install (Recommended)**:
+
+Please install micromamba using the official [guide](https://mamba.readthedocs.io/en/latest/micromamba-installation.html) or using the commands below:
 
 ```bash
-# create and activate an environment named clairsto
-# install pypy and packages in the environemnt
-conda create -n clairsto -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina python=3.9.0 -y
-source activate clairsto
+wget -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/api/micromamba/linux-64/latest
+mkdir micromamba
+tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 -C micromamba
+cd micromamba
+./bin/micromamba shell init -s bash -p ~/micromamba
+source ~/.bashrc
+```
+
+**Install ClairS-TO using anaconda (or micromamba) step by step:**
+
+```bash
+# create and activate an environment named clairs-to
+# install pypy and packages in the environment
+# for anaconda 
+conda create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina einops python=3.9.0 -y
+source activate clairs-to
+
+# or
+# for micromamba
+micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina einops python=3.9.0 -y
+micromamba activate clairs-to
 
 git clone https://github.com/HKU-BAL/ClairS-TO.git
 cd ClairS-TO
@@ -156,11 +175,14 @@ cd ClairS-TO
 # make sure in conda environment
 # download pre-trained models
 echo ${CONDA_PREFIX}
-mkdir -p ${CONDA_PREFIX}/bin/clairsto_models
-wget http://www.bio8.cs.hku.hk/clairsto/models/clairsto_models.tar.gz
-tar -zxvf clairsto_models.tar.gz -C ${CONDA_PREFIX}/bin/clairsto_models/
+mkdir -p ${CONDA_PREFIX}/bin/clairs-to_models
+mkdir -p ${CONDA_PREFIX}/bin/clairs-to_databases
+wget http://www.bio8.cs.hku.hk/clairs-to/models/clairs-to_models.tar.gz
+wget http://www.bio8.cs.hku.hk/clairs-to/databases/clairs-to_databases.tar.gz
+tar -zxvf clairs-to_models.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_models/
+tar -zxvf clairs-to_databases.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_databases/
 
-./run_clairsto --help
+./run_clairs_to --help
 ```
 
 ### Option 4. Docker Dockerfile
@@ -171,12 +193,12 @@ This is the same as option 1 except that you are building a docker image yoursel
 git clone https://github.com/HKU-BAL/ClairS-TO.git
 cd ClairS-TO
 
-# build a docker image named hkubal/clairsto:latest
+# build a docker image named hkubal/clairs-to:latest
 # might require docker authentication to build docker image
-docker build -f ./Dockerfile -t hkubal/clairsto:latest .
+docker build -f ./Dockerfile -t hkubal/clairs-to:latest .
 
-# run the docker image like option 1
-docker run -it hkubal/clairsto:latest /opt/bin/run_clairsto --help
+# run the docker image like Option 1
+docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
 ```
 
 ------
@@ -186,7 +208,7 @@ docker run -it hkubal/clairsto:latest /opt/bin/run_clairsto --help
 ### General Usage
 
 ```bash
-./run_clairsto \
+./run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \    ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \             ## use your reference file name here
   --threads ${THREADS} \                     ## maximum threads to be used
@@ -262,19 +284,19 @@ docker run -it hkubal/clairsto:latest /opt/bin/run_clairsto --help
 #### Call SNVs in one or mutiple chromosomes using the `-C/--ctg_name` parameter
 
 ```bash
-./run_clairsto -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -C chr21,chr22
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -C chr21,chr22
 ```
 
 #### Call SNVs in one specific region using the `-r/--region` parameter
 
 ```bash
-./run_clairsto -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -r chr20:1000000-2000000
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -r chr20:1000000-2000000
 ```
 
 #### Call SNVs at interested variant sites (genotyping) using the `-G/--genotyping_mode_vcf_fn` parameter
 
 ```bash
-./run_clairsto -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -G input.vcf
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -G input.vcf
 ```
 
 #### Call SNVs in the BED regions using the `-B/--bed_fn` parameter
@@ -290,11 +312,22 @@ echo -e "${CTG2}\t${START_POS_2}\t${END_POS_2}" >> input.bed
 Then:
 
 ```bash
-./run_clairsto -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -B input.bed
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -B input.bed
 ```
 
 ------
 
+## Genetic Databases
+ClairS-TO utilizes genetic databases (Default: gnomAD, dbSNP, and 1000G PoN) to tag germline variants. 
+Users can choose any resource from preset databases or provide their own PoN resource to achieve germline tagging.
+
+| Database  | Source |                                                   Visiting URL                                                   |       Visiting Time       | Original Sites |  Filtering Criteria  | Remaining Sites |    Remaining Columns    |
+|:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:--------------------:|:---------------:|:-----------------------:|
+|  gnomAD   |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07  |  268,225,276   | Sites with AF ≥ 0.01 |   16,209,110    | #CHROM  POS ID  REF ALT |
+|   dbSNP   |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22  |   60,691,395   |  Non-Somatic sites   |   58,868,455    | #CHROM  POS ID  REF ALT |
+| 1000G PoN |  GATK  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32  |   2,609,566    |      All sites       |    2,609,566    | #CHROM  POS ID  REF ALT |
+
+------
 
 ## Disclaimer
 

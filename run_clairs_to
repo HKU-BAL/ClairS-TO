@@ -57,7 +57,7 @@ major_contigs_order = ["chr" + str(a) for a in list(range(1, 23))] + [str(a) for
                                                                                    list(range(1, 23))]
 
 file_directory = os.path.dirname(os.path.realpath(__file__))
-main_entry = os.path.join(file_directory, "clairsto.py")
+main_entry = os.path.join(file_directory, "clairs_to.py")
 MAX_STEP = 20
 
 OutputPath = namedtuple('OutputPath', [
@@ -493,27 +493,30 @@ def check_args(args):
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
     if args.pileup_affirmational_model_path is None:
-        args.pileup_affirmational_model_path = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'clairst_models', args.platform, 'pileup_acgt.pkl')
+        args.pileup_affirmational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmational.pkl')
 
     if args.pileup_negational_model_path is None:
-        args.pileup_negational_model_path = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'clairst_models', args.platform, 'pileup_nacgt.pkl')
+        args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
 
     args.pileup_affirmational_model_path = file_path_from(file_name=args.pileup_affirmational_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
 
     args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True,is_directory=False, allow_none=False)
 
-    if args.gnomad_resource is None:
-        args.gnomad_resource = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'germline_filtering_resources', 'gnomad_resource_simplified.vcf.gz')
+    if args.likelihood_matrix_data is None:
+        args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
 
-    if args.pon_resource is None:
-        args.pon_resource = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'germline_filtering_resources', 'pon_resource_simplified.vcf.gz')
+    if args.gnomad_resource is None:
+        args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad_af_0.01_resource.vcf.gz')
 
     if args.dbsnp_resource is None:
-        args.dbsnp_resource = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'germline_filtering_resources', 'dbsnp_resource_simplified.vcf.gz')
+        args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp_non_somatic_resource.vcf.gz')
+
+    if args.pon_resource is None:
+        args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g_pon_resource.vcf.gz')
 
     args.gnomad_resource = file_path_from(file_name=args.gnomad_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
-    args.pon_resource = file_path_from(file_name=args.pon_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
     args.dbsnp_resource = file_path_from(file_name=args.dbsnp_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
+    args.pon_resource = file_path_from(file_name=args.pon_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
@@ -526,8 +529,6 @@ def check_args(args):
         args.min_coverage = param.min_coverage
     if args.chunk_size is None:
         args.chunk_size = 5000000
-    # if args.platform not in {'ont_r10', 'ont_r9', 'ont_r10_guppy', 'ont_r9_guppy', 'ont', 'ilmn', 'hifi_sequel2', 'hifi_revio', 'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz'}:
-    #     logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ont_r9_guppy, ilmn, hifi_sequel2, hifi_revio}'))
 
     if args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ilmn', 'hifi_revio'}:
         logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}'))
@@ -591,18 +592,15 @@ def print_args(args):
     logging("[INFO] ENABLE DRY RUN: {}".format(args.dry_run))
     logging("[INFO] ENABLE INDEL CALLING: {}".format(args.enable_indel_calling))
     logging("[INFO] ENABLE PRINTING REFERENCE CALLS: {}".format(args.print_ref_calls))
-    # logging("[INFO] ENABLE PRINTING GERMLINE CALLS: {}".format(args.disable_print_germline_calls))
     logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
     logging("[INFO] ENABLE REMOVING INTERMEDIATE FILES: {}".format(args.remove_intermediate_dir))
     logging("[INFO] DISABLE APPLY GERMLINE TAGGING: {}".format(args.disable_germline_tagging))
     logging("[INFO] DISABLE APPLY GNOMAD TAGGING: {}".format(args.disable_gnomad_tagging))
-    logging("[INFO] DISABLE APPLY 1000G PON TAGGING: {}".format(args.disable_pon_tagging))
     logging("[INFO] DISABLE APPLY DBSNP TAGGING: {}".format(args.disable_dbsnp_tagging))
+    logging("[INFO] DISABLE APPLY 1000G PON TAGGING: {}".format(args.disable_pon_tagging))
     logging("[INFO] USE OWN PON RESOURCE: {}".format(args.use_own_pon_resource is not None))
     logging("[INFO] DISABLE PRINTING GERMLINE CALLS WITH DATABASES: {}".format(args.disable_print_germline_calls))
     logging("")
-
-    args.platform_specific = args.platform
 
     if args.platform.startswith('ont'):
         args.platform = 'ont'
@@ -654,11 +652,11 @@ def print_command_line(args):
         cmdline += '--apply_post_processing False ' if args.apply_post_processing is False else ""
         cmdline += '--disable_germline_tagging ' if args.disable_germline_tagging else ""
         cmdline += '--disable_gnomad_tagging ' if args.disable_gnomad_tagging else ""
-        cmdline += '--disable_pon_tagging ' if args.disable_pon_tagging else ""
         cmdline += '--disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ""
+        cmdline += '--disable_pon_tagging ' if args.disable_pon_tagging else ""
         cmdline += '--gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ""
-        cmdline += '--pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ""
         cmdline += '--dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ""
+        cmdline += '--pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ""
         cmdline += '--use_own_pon_resource {} '.format(args.use_own_pon_resource) if args.use_own_pon_resource is not None else ""
         cmdline += '--skip_steps {} '.format(args.skip_steps) if args.skip_steps is not None else ""
         cmdline += '--conda_prefix {} '.format(args.conda_prefix) if args.conda_prefix is not None else ""
@@ -814,7 +812,8 @@ def somatic_calling(args):
     cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
     cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
     cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
-    cv_command += ' --platform ' + args.platform_specific
+    cv_command += ' --platform ' + args.platform
+    cv_command += ' --likelihood_matrix_data {} '.format(args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
     cv_command += ' --show_ref ' if args.print_ref_calls else ""
     cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
     cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS.log'
@@ -831,7 +830,7 @@ def somatic_calling(args):
     commands_list += [p_mv_command]
 
     if not args.disable_germline_tagging:
-        # GERMLINE TAGGING
+        # STEP 6: GERMLINE TAGGING
         echo_list.append("[INFO] STEP 3: Germline Tagging with Databases")
         gf_command = '( ' + time + args.parallel
         gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-4_germline_tagging.log'
@@ -844,18 +843,18 @@ def somatic_calling(args):
         gf_command += ' --parallel ' + args.parallel
         gf_command += ' --show_ref ' if args.print_ref_calls else ''
         gf_command += ' --disable_gnomad_tagging ' if args.disable_gnomad_tagging else ''
-        gf_command += ' --disable_pon_tagging ' if args.disable_pon_tagging else ''
         gf_command += ' --disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ''
+        gf_command += ' --disable_pon_tagging ' if args.disable_pon_tagging else ''
         gf_command += ' --gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ''
-        gf_command += ' --pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ''
         gf_command += ' --dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ''
+        gf_command += ' --pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ''
         gf_command += ' --use_own_pon_resource {} '.format(args.use_own_pon_resource) if args.use_own_pon_resource is not None else ''
         gf_command += ' --disable_print_germline_calls ' if args.disable_print_germline_calls else ''
         gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
         gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/3_GERMLINE_TAG.log'
         commands_list += [gf_command]
 
-        # MERGE GERMLINE TAGGING VCFs
+        # STEP 6-1 MERGE GERMLINE TAGGING VCFs
         echo_list.append("[INFO] Merge Pileup Germline Tagging VCFs")
         p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
         p_mv_command += ' --ref_fn ' + args.ref_fn
@@ -866,11 +865,12 @@ def somatic_calling(args):
         commands_list += [p_mv_command]
 
     else:
+        # STEP 6: GERMLINE TAGGING
         echo_list.append("[INFO] STEP 3: Germline Tagging with Databases")
         subprocess.run("ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf', args.output_dir + '/tmp/vcf_output/pileup_germline_tagging.vcf'), shell=True)
 
-    # SHORT-READ REALIGNMENT
     if args.platform == 'ilmn':
+        # STEP 7: SHORT-READ REALIGNMENT
         echo_list.append("[INFO] STEP 4: Short-read Realignment")
         realign_command = '( ' + time + args.python + ' ' + main_entry + ' realign_variants'
         realign_command += ' --bam_fn ' + args.tumor_bam_fn
@@ -885,8 +885,8 @@ def somatic_calling(args):
         realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_REALIGN.log'
         commands_list += [realign_command]
 
-    # HAPLOTYPE FILTERING
     else:
+        # STEP 7: HAPLOTYPE FILTERING
         echo_list.append("[INFO] STEP 4: Haplotype Filtering")
         hap_g_command = '( ' + time + args.pypy + ' ' + main_entry + ' haplotype_filtering'
         hap_g_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -904,7 +904,7 @@ def somatic_calling(args):
         hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER.log'
         commands_list += [hap_g_command]
 
-    # SORT FINAL VCF
+    # STEP 8: SORT FINAL VCF
     echo_list.append("[INFO] STEP 5: Postprocess VCF for Final Output")
     sort_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
     sort_vcf_command += ' --ref_fn ' + args.ref_fn
@@ -919,7 +919,7 @@ def somatic_calling(args):
     sort_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_MV.log'
     commands_list += [sort_vcf_command]
 
-    # ADD REFERENCE CALLs
+    # STEP 9: ADD REFERENCE CALLs
     if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
         echo_list.append("[INFO] Add reference calls to the output VCF output")
         genotyping_command = args.pypy + ' ' + main_entry + ' add_back_missing_variants_in_genotyping'
@@ -959,7 +959,7 @@ def somatic_calling(args):
 def somatic_parser():
 
     parser = argparse.ArgumentParser(
-        description="Run ClairSTO for tumor-only somatic variant calling. Example run: run_clairsto -T TUMOR_BAM -R REF -o OUTPUT_DIR -t THREADS -p PLATFORM")
+        description="Run ClairS-TO for tumor-only somatic variant calling. Example run: run_clairs_to -T TUMOR_BAM -R REF -o OUTPUT_DIR -t THREADS -p PLATFORM")
 
     # print version
     parser.add_argument('-v', '--version', action='version',
@@ -1024,6 +1024,13 @@ def somatic_parser():
         type=str,
         default=None,
         help="Specify the path to your own tumor-only somatic calling pileup negational model."
+    )
+
+    optional_params.add_argument(
+        "--likelihood_matrix_data",
+        type=str,
+        default=None,
+        help=SUPPRESS
     )
 
     optional_params.add_argument(
@@ -1233,15 +1240,15 @@ def somatic_parser():
     )
 
     optional_params.add_argument(
-        "--disable_pon_tagging",
-        action='store_true',
-        help="Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging."
-    )
-
-    optional_params.add_argument(
         "--disable_dbsnp_tagging",
         action='store_true',
         help="Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging."
+    )
+
+    optional_params.add_argument(
+        "--disable_pon_tagging",
+        action='store_true',
+        help="Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging."
     )
 
     optional_params.add_argument(
@@ -1252,14 +1259,14 @@ def somatic_parser():
     )
 
     optional_params.add_argument(
-        "--pon_resource",
+        "--dbsnp_resource",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
     optional_params.add_argument(
-        "--dbsnp_resource",
+        "--pon_resource",
         type=str,
         default=None,
         help=SUPPRESS
@@ -1337,18 +1344,11 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
-        "--platform_specific",
-        type=str,
-        default=None,
-        help=SUPPRESS
-    )
-
     return parser
 
 def main():
     """
-    Main interface for ClairSTO.
+    Main interface for ClairS-TO.
     """
 
     global args
@@ -1359,7 +1359,7 @@ def main():
     args = parser.parse_args()
 
     args.output_dir = folder_path_from(args.output_dir, create_not_found=True)
-    tee_logger = os.path.join(args.output_dir, 'run_clairsto.log' if not args.dry_run else "run_clairsto_dry_run.log")
+    tee_logger = os.path.join(args.output_dir, 'run_clairs_to.log' if not args.dry_run else "run_clairs_to_dry_run.log")
     if os.path.exists(tee_logger):
         subprocess.run("mv {} {}".format(tee_logger, tee_logger + '.bak'), shell=True)
     try:

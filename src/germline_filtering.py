@@ -19,14 +19,14 @@ def germline_filter(args):
 
     ctg_name = args.ctg_name
     disable_gnomad_tagging = args.disable_gnomad_tagging
-    disable_pon_tagging = args.disable_pon_tagging
     disable_dbsnp_tagging = args.disable_dbsnp_tagging
+    disable_pon_tagging = args.disable_pon_tagging
     disable_print_germline_calls = args.disable_print_germline_calls
     pileup_vcf_fn = args.pileup_vcf_fn
 
     gnomad_vcf_fn = args.gnomad_resource
-    pon_vcf_fn = args.pon_resource
     dbsnp_vcf_fn = args.dbsnp_resource
+    pon_vcf_fn = args.pon_resource
     self_vcf_fn = args.use_own_pon_resource
     pileup_output_vcf_fn = args.output_vcf_fn
 
@@ -62,8 +62,8 @@ def germline_filter(args):
     germline_filter_variant_dict_id_set_contig = input_variant_dict_id_set_contig.copy()
 
     input_inter_gnomad_variant_dict_id_set_contig = defaultdict(set)
-    input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
     input_inter_dbsnp_variant_dict_id_set_contig = defaultdict(set)
+    input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
     input_inter_self_variant_dict_id_set_contig = defaultdict(set)
 
     total_input = 0
@@ -106,38 +106,6 @@ def germline_filter(args):
 
         print("Filtered by gnomAD resource: {}".format(total_filter_by_gnomad))
 
-    # if apply_pon_tagging and pon_vcf_fn is not None:
-    if not disable_pon_tagging and pon_vcf_fn is not None:
-        pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
-                                      ctg_name=ctg_name,
-                                      keep_row_str=False,
-                                      filter_tag=None,
-                                      save_header=True)
-        print("Processing 1000G PoN resource...")
-        pon_vcf_reader.read_vcf()
-        pon_input_variant_dict = pon_vcf_reader.variant_dict
-
-        pon_variant_dict_id_set_contig = defaultdict(set)
-
-        for k, v in pon_input_variant_dict.items():
-            if ctg_name is None:
-                pon_variant_dict_id_set_contig[k[0]].add(
-                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-            else:
-                pon_variant_dict_id_set_contig[ctg_name].add(
-                    (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-
-        for k, v in germline_filter_variant_dict_id_set_contig.items():
-            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - pon_variant_dict_id_set_contig[k]
-            input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(pon_variant_dict_id_set_contig[k])
-
-        total_filter_by_pon = 0
-
-        for k, v in input_inter_pon_variant_dict_id_set_contig.items():
-            total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
-
-        print("Filtered by 1000G PoN resource: {}".format(total_filter_by_pon))
-
     # if apply_dbsnp_tagging and dbsnp_vcf_fn is not None:
     if not disable_dbsnp_tagging and dbsnp_vcf_fn is not None:
         dbsnp_vcf_reader = VcfReader(vcf_fn=dbsnp_vcf_fn,
@@ -169,6 +137,38 @@ def germline_filter(args):
             total_filter_by_dbsnp += len(input_inter_dbsnp_variant_dict_id_set_contig[k])
 
         print("Filtered by dbSNP resource: {}".format(total_filter_by_dbsnp))
+
+    # if apply_pon_tagging and pon_vcf_fn is not None:
+    if not disable_pon_tagging and pon_vcf_fn is not None:
+        pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
+                                      ctg_name=ctg_name,
+                                      keep_row_str=False,
+                                      filter_tag=None,
+                                      save_header=True)
+        print("Processing 1000G PoN resource...")
+        pon_vcf_reader.read_vcf()
+        pon_input_variant_dict = pon_vcf_reader.variant_dict
+
+        pon_variant_dict_id_set_contig = defaultdict(set)
+
+        for k, v in pon_input_variant_dict.items():
+            if ctg_name is None:
+                pon_variant_dict_id_set_contig[k[0]].add(
+                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+            else:
+                pon_variant_dict_id_set_contig[ctg_name].add(
+                    (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+
+        for k, v in germline_filter_variant_dict_id_set_contig.items():
+            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - pon_variant_dict_id_set_contig[k]
+            input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(pon_variant_dict_id_set_contig[k])
+
+        total_filter_by_pon = 0
+
+        for k, v in input_inter_pon_variant_dict_id_set_contig.items():
+            total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
+
+        print("Filtered by 1000G PoN resource: {}".format(total_filter_by_pon))
 
     if self_vcf_fn is not None:
         self_vcf_reader = VcfReader(vcf_fn=self_vcf_fn,
@@ -238,14 +238,14 @@ def germline_filter(args):
                         columns[7] = ""
                         if pos_info in input_inter_gnomad_variant_dict_id_set_contig[contig]:
                             columns[7] += "gnomAD"
-                        if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
-                            if columns[7] != "":
-                                columns[7] += ","
-                            columns[7] += "PoN"
                         if pos_info in input_inter_dbsnp_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
                                 columns[7] += ","
                             columns[7] += "dbSNP"
+                        if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
+                            if columns[7] != "":
+                                columns[7] += ","
+                            columns[7] += "PoN"
                         if pos_info in input_inter_self_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
                                 columns[7] += ","
@@ -272,14 +272,14 @@ def main():
     parser.add_argument('--gnomad_resource', type=str, default=None,
                         help="GNOMAD resource")
 
-    parser.add_argument('--pon_resource', type=str, default=None,
-                        help="PON resource")
-
     parser.add_argument('--dbsnp_resource', type=str, default=None,
                         help="DBSNP resource")
 
+    parser.add_argument('--pon_resource', type=str, default=None,
+                        help="PON resource")
+
     parser.add_argument('--use_own_pon_resource', type=str, default=None,
-                        help="Self resource")
+                        help="Own PoN resource")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")

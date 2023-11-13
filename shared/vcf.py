@@ -13,15 +13,15 @@ version = param.version
 
 vcf_header = dedent("""\
             ##fileformat=VCFv4.2
-            ##source=ClairSTO
+            ##source=ClairS-TO
             ##{}_version={}
             ##FILTER=<ID=PASS,Description="All filters passed">
             ##FILTER=<ID=Germline,Description="Germline variant tagged by databases">
             ##FILTER=<ID=LowQual,Description="Low quality variant">
             ##FILTER=<ID=RefCall,Description="Reference call">
             ##INFO=<ID=gnomAD,Description="Germline variant tagged by gnomAD resource">
-            ##INFO=<ID=PoN,Description="Germline variant tagged by 1000G PoN resource">
             ##INFO=<ID=dbSNP,Description="Germline variant tagged by dnSNP resource">
+            ##INFO=<ID=PoN,Description="Germline variant tagged by 1000G PoN resource">
             ##INFO=<ID=OwnPoN,Description="Germline variant tagged by own PoN resource">
             ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
             ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
