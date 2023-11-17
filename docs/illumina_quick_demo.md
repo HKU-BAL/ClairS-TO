@@ -80,7 +80,7 @@ docker run -it \
 
 |  Type   | Precision | Recall | F1-score | TP | FP | FN |
 | :-----: |:---------:|:------:|:--------:|:--:|:--:|:--:|
-| **SNV** |  0.9062   |  1.0   |  0.9508  | 29 | 3  | 0  |
+| **SNV** |  0.9667   |  1.0   |  0.9831  | 29 | 1  | 0  |
 
 
 **Or run [som.py]() for benchmarking (optional)**
