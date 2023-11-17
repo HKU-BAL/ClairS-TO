@@ -729,7 +729,7 @@ def somatic_calling(args):
 
     if args.platform == 'ilmn':
         echo_list.append("[INFO] Create Tensors for Negational Model")
-        subprocess.run("ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/*'), shell=True)
+        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/')]
 
     else:
         echo_list.append("[INFO] Create Tensors for Negational Model")
@@ -832,7 +832,7 @@ def somatic_calling(args):
     else:
         # STEP 6: GERMLINE TAGGING
         echo_list.append("[INFO] STEP 3: Germline Tagging with Databases")
-        subprocess.run("ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf', args.output_dir + '/tmp/vcf_output/pileup_germline_tagging.vcf'), shell=True)
+        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf', args.output_dir + '/tmp/vcf_output/pileup_germline_tagging.vcf')]
 
     if args.platform == 'ilmn':
         # STEP 7: SHORT-READ REALIGNMENT
