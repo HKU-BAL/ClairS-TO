@@ -65,8 +65,8 @@ OutputPath = namedtuple('OutputPath', [
     'tmp_file_path',
     'split_bed_path',
     'candidates_path',
-    'pileup_tensor_can_path',
-    'pileup_tensor_can_bq0_path',
+    'pileup_tensor_can_affirmative_path',
+    'pileup_tensor_can_negational_path',
     'vcf_output_path',
 ])
 
@@ -101,16 +101,16 @@ def create_output_folder(args):
     tmp_file_path = folder_path_from(os.path.join(args.output_dir, 'tmp'), create_not_found=True)
     split_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_beds'), create_not_found=True)
     candidates_path = folder_path_from(os.path.join(tmp_file_path, 'candidates'), create_not_found=True)
-    pileup_tensor_can_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can'), create_not_found=True)
-    pileup_tensor_can_bq0_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_bq0'), create_not_found=True)
+    pileup_tensor_can_affirmative_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_affirmative'), create_not_found=True)
+    pileup_tensor_can_negational_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_negational'), create_not_found=True)
     vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'vcf_output'), create_not_found=True)
 
     output_path = OutputPath(log_path=log_path,
                              tmp_file_path=tmp_file_path,
                              split_bed_path=split_bed_path,
                              candidates_path=candidates_path,
-                             pileup_tensor_can_path=pileup_tensor_can_path,
-                             pileup_tensor_can_bq0_path=pileup_tensor_can_bq0_path,
+                             pileup_tensor_can_affirmative_path=pileup_tensor_can_affirmative_path,
+                             pileup_tensor_can_negational_path=pileup_tensor_can_negational_path,
                              vcf_output_path=vcf_output_path)
     return output_path
 
@@ -492,13 +492,13 @@ def check_args(args):
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
-    if args.pileup_affirmational_model_path is None:
-        args.pileup_affirmational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmational.pkl')
+    if args.pileup_affirmative_model_path is None:
+        args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmational.pkl')
 
     if args.pileup_negational_model_path is None:
         args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
 
-    args.pileup_affirmational_model_path = file_path_from(file_name=args.pileup_affirmational_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
+    args.pileup_affirmative_model_path = file_path_from(file_name=args.pileup_affirmative_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
 
     args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True,is_directory=False, allow_none=False)
 
@@ -575,7 +575,7 @@ def print_args(args):
     logging("[INFO] THREADS: {}".format(args.threads))
     logging("[INFO] OUTPUT FOLDER: {}".format(args.output_dir))
     logging("[INFO] OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.output_prefix + '.vcf.gz')))
-    logging("[INFO] PILEUP AFFIRMATIONAL MODEL PATH: {}".format(args.pileup_affirmational_model_path))
+    logging("[INFO] PILEUP AFFIRMATIVE MODEL PATH: {}".format(args.pileup_affirmative_model_path))
     logging("[INFO] PILEUP NEGATIONAL MODEL PATH: {}".format(args.pileup_negational_model_path))
     logging("[INFO] BED FILE PATH: {}".format(args.bed_fn))
     logging("[INFO] GENOTYPING MODE VCF FILE PATH: {}".format(args.genotyping_mode_vcf_fn))
@@ -623,7 +623,7 @@ def print_command_line(args):
         cmdline += '--threads {} '.format(args.threads)
         cmdline += '--platform {} '.format(args.platform)
         cmdline += '--output_dir {} '.format(args.output_dir)
-        cmdline += '--pileup_affirmational_model_path {} '.format(args.pileup_affirmational_model_path) if args.pileup_affirmational_model_path is not None else ""
+        cmdline += '--pileup_affirmative_model_path {} '.format(args.pileup_affirmative_model_path) if args.pileup_affirmative_model_path is not None else ""
         cmdline += '--pileup_negational_model_path {} '.format(args.pileup_negational_model_path) if args.pileup_negational_model_path is not None else ""
         cmdline += '--ctg_name {} '.format(args.ctg_name) if args.ctg_name is not None else ""
         cmdline += '--region {} '.format(args.region) if args.region is not None else ""
@@ -709,100 +709,65 @@ def somatic_calling(args):
     ec_command += ' --output_fn CANDIDATES_FILES '
     commands_list.append(ec_command)
 
-    if args.platform == 'ilmn':
-        ##STEP 2: CREATE PAIR TENSOR
-        echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
-        echo_list[-1] += ("[INFO] Create Tensors for Affirmational & Negational Model")
-        cpt_command = '( ' + time + args.parallel
-        cpt_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor.log'
-        cpt_command += ' -j ' + str(args.threads)
-        cpt_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
-        cpt_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-        cpt_command += ' --ref_fn ' + args.ref_fn
-        cpt_command += ' --ctg_name {1/.}'
-        cpt_command += ' --samtools ' + args.samtools
-        cpt_command += ' --candidates_bed_regions {1}'
-        cpt_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can/{1/} '
-        cpt_command += ' --platform ' + args.platform
-        cpt_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        cpt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT.log'
-        commands_list += [cpt_command]
+    ##STEP 2: CREATE PILEUP TENSOR
+    echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
+    echo_list[-1] += ("[INFO] Create Tensors for Affirmative Model")
+    cpt_aff_command = '( ' + time + args.parallel
+    cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative.log'
+    cpt_aff_command += ' -j ' + str(args.threads)
+    cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+    cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+    cpt_aff_command += ' --ref_fn ' + args.ref_fn
+    cpt_aff_command += ' --ctg_name {1/.}'
+    cpt_aff_command += ' --samtools ' + args.samtools
+    cpt_aff_command += ' --candidates_bed_regions {1}'
+    cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+    cpt_aff_command += ' --platform ' + args.platform
+    cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative.log'
+    commands_list += [cpt_aff_command]
 
-        ## STEP 3: PREDICT
-        echo_list.append("[INFO] Pileup Model Prediction along with Affirmational & Negational Model")
-        p_predict_command = '( ' + time + args.parallel
-        p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
-        p_predict_command += ' -j ' + str(args.threads)
-        p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
-        p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can/{1/} '
-        p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can/{1/} '
-        p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-        p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmational_model_path
-        p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
-        p_predict_command += ' --use_gpu ' + str(args.use_gpu)
-        p_predict_command += ' --platform ' + args.platform
-        p_predict_command += ' --ctg_name {1/.}'
-        p_predict_command += ' --pileup '
-        p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
-        p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
-        commands_list += [p_predict_command]
+    if args.platform == 'ilmn':
+        echo_list.append("[INFO] Create Tensors for Negational Model")
+        subprocess.run("ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/*'), shell=True)
 
     else:
-        ##STEP 2: CREATE PAIR TENSOR
-        echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
-        echo_list[-1] += ("[INFO] Create Tensors for Affirmational Model")
-        cpt_command = '( ' + time + args.parallel
-        cpt_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor.log'
-        cpt_command += ' -j ' + str(args.threads)
-        cpt_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
-        cpt_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-        cpt_command += ' --ref_fn ' + args.ref_fn
-        cpt_command += ' --ctg_name {1/.}'
-        cpt_command += ' --samtools ' + args.samtools
-        cpt_command += ' --candidates_bed_regions {1}'
-        cpt_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can/{1/} '
-        cpt_command += ' --platform ' + args.platform
-        cpt_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        cpt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmational.log'
-        commands_list += [cpt_command]
-
         echo_list.append("[INFO] Create Tensors for Negational Model")
-        cpt_bq0_command = '( ' + time + args.parallel
-        cpt_bq0_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_bq0.log'
-        cpt_bq0_command += ' -j ' + str(args.threads)
-        cpt_bq0_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
-        cpt_bq0_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-        cpt_bq0_command += ' --ref_fn ' + args.ref_fn
-        cpt_bq0_command += ' --ctg_name {1/.}'
-        cpt_bq0_command += ' --samtools ' + args.samtools
-        cpt_bq0_command += ' --candidates_bed_regions {1}'
-        cpt_bq0_command += ' --min_bq 0'
-        cpt_bq0_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_bq0/{1/} '
-        cpt_bq0_command += ' --platform ' + args.platform
-        cpt_bq0_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        cpt_bq0_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational.log'
-        commands_list += [cpt_bq0_command]
+        cpt_neg_command = '( ' + time + args.parallel
+        cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational.log'
+        cpt_neg_command += ' -j ' + str(args.threads)
+        cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+        cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+        cpt_neg_command += ' --ref_fn ' + args.ref_fn
+        cpt_neg_command += ' --ctg_name {1/.}'
+        cpt_neg_command += ' --samtools ' + args.samtools
+        cpt_neg_command += ' --candidates_bed_regions {1}'
+        cpt_neg_command += ' --min_bq 0'
+        cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+        cpt_neg_command += ' --platform ' + args.platform
+        cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+        cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational.log'
+        commands_list += [cpt_neg_command]
 
-        ## STEP 3: PREDICT
-        echo_list.append("[INFO] Pileup Model Prediction along with Affirmational & Negational Model")
-        p_predict_command = '( ' + time + args.parallel
-        p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
-        p_predict_command += ' -j ' + str(args.threads)
-        p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
-        p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can/{1/} '
-        p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_bq0/{1/} '
-        p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-        p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmational_model_path
-        p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
-        p_predict_command += ' --use_gpu ' + str(args.use_gpu)
-        p_predict_command += ' --platform ' + args.platform
-        p_predict_command += ' --ctg_name {1/.}'
-        p_predict_command += ' --pileup '
-        p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
-        p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
-        commands_list += [p_predict_command]
+    ## STEP 3: PREDICT
+    echo_list.append("[INFO] Pileup Model Prediction along with Affirmative & Negational Model")
+    p_predict_command = '( ' + time + args.parallel
+    p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
+    p_predict_command += ' -j ' + str(args.threads)
+    p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
+    p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+    p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+    p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+    p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmative_model_path
+    p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
+    p_predict_command += ' --use_gpu ' + str(args.use_gpu)
+    p_predict_command += ' --platform ' + args.platform
+    p_predict_command += ' --ctg_name {1/.}'
+    p_predict_command += ' --pileup '
+    p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
+    p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
+    commands_list += [p_predict_command]
 
     ## STEP 4: CALL VARIANTS
     echo_list.append("[INFO] Pileup Model Calling Variants")
@@ -914,7 +879,6 @@ def somatic_calling(args):
     sort_vcf_command += ' --qual ' + str(args.qual)
     sort_vcf_command += ' --sample_name ' + str(args.sample_name)
     sort_vcf_command += ' --enable_indel_calling ' + str(args.enable_indel_calling)
-    # sort_vcf_command += ' --prefer_recall ' + str(args.prefer_recall)
     sort_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
     sort_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_MV.log'
     commands_list += [sort_vcf_command]
@@ -931,7 +895,7 @@ def somatic_calling(args):
         genotyping_command += ' 2>&1 | tee ' + args.output_dir + '/logs/6_GT.log'
         commands_list += [genotyping_command]
 
-    # EXCUTE COMMANDS STEP BY STEP
+    # EXECUTE COMMANDS STEP BY STEP
     skip_steps = args.skip_steps.rstrip().split(',') if args.skip_steps else None
     stdout = sys.stdout if args.tee is None else args.tee.stdin
     for i, (command, echo) in enumerate(zip(commands_list, echo_list)):
@@ -1013,10 +977,10 @@ def somatic_parser():
 
     optional_params = parser.add_argument_group('Optional parameters')
     optional_params.add_argument(
-        "--pileup_affirmational_model_path",
+        "--pileup_affirmative_model_path",
         type=str,
         default=None,
-        help="Specify the path to your own tumor-only somatic calling pileup affirmational model."
+        help="Specify the path to your own tumor-only somatic calling pileup affirmative model."
     )
 
     optional_params.add_argument(

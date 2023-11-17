@@ -467,7 +467,7 @@ def call_variants_from_probability(args):
                            sample_name=args.sample_name,
                            )
 
-    logging.info("Calling somatic variants ...")
+    logging.info("[INFO] Calling tumor-only somatic variants ...")
     variant_call_start_time = time()
     prediction_path = args.predict_fn
 
@@ -570,7 +570,7 @@ def call_variants_from_probability(args):
             vcf_writer=vcf_writer,
         )
 
-    logging.info("Total time elapsed: %.2f s" % (time() - variant_call_start_time))
+    logging.info("[INFO] Total time elapsed: %.2f s" % (time() - variant_call_start_time))
 
     vcf_writer.close()
     # remove file if on variant in output

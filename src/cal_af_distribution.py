@@ -117,8 +117,6 @@ def extract_base(POS):
 
 class INFO():
     def __init__(self):
-        # self.normal_base_counter = None
-        # self.normal_depth = None
         self.tumor_base_counter = None
         self.tumor_depth = None
         self.alt_base = None
@@ -177,7 +175,7 @@ def cal_af(args, truth_variant_dict=None, input_variant_dict=None):
                 results_dict[key] = result
 
     min_mq = param.min_mq
-    min_bq = param.ont_min_bq
+    min_bq = param.min_bq
     excl_flag = 2316
 
     phasing_option = "--output-extra HP " if args.phase_output else " "
@@ -187,7 +185,7 @@ def cal_af(args, truth_variant_dict=None, input_variant_dict=None):
                                                                                        excl_flag,
                                                                                           phasing_option)
 
-    global normal_samtools_command, tumor_samtools_command
+    global tumor_samtools_command
     tumor_samtools_command = samtools_command + args.tumor_bam_fn
 
     total_num = 0

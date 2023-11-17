@@ -12,7 +12,7 @@ import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
-HIGH_QUAL = 0.9
+HIGH_QUAL = 11
 LOW_AF = 0.1
 min_hom_germline_af = 0.75
 eps = 0.2
@@ -76,7 +76,7 @@ def haplotype_filter_per_pos(args):
     hetero_germline_set = set()
     homo_germline_set = set()
 
-    args.qual = args.qual if args.qual is not None else 1.0
+    args.qual = args.qual if args.qual is not None else 102
     args.af = args.af if args.af is not None else 1.0
 
     if not os.path.exists(tumor_bam_fn):
@@ -511,7 +511,7 @@ def haplotype_filter(args):
 
     p_vcf_writer.close()
 
-    print("Total input calls: {}, filtered by haplotype match {}".format(len(input_variant_dict), len(fail_set)))
+    print("[INFO] Total input calls: {}, filtered by haplotype match {}".format(len(input_variant_dict), len(fail_set)))
 
 
 def main():

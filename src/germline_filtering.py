@@ -70,7 +70,8 @@ def germline_filter(args):
     for k, v in input_variant_dict_id_set_contig.items():
         total_input += len(input_variant_dict_id_set_contig[k])
 
-    print("Total input pass calls: {}".format(total_input))
+    print("[INFO] Processing in {}...".format(ctg_name))
+    print("[INFO] Processing in {}: total input pass calls: {}".format(ctg_name, total_input))
 
     input_keys_list = list(input_variant_dict_id_set_contig.keys())
 
@@ -81,7 +82,7 @@ def germline_filter(args):
                                      keep_row_str=False,
                                      filter_tag=None,
                                      save_header=True)
-        print("Processing gnomAD resource...")
+        # print("Processing gnomAD resource...")
         gnomad_vcf_reader.read_vcf()
         gnomad_input_variant_dict = gnomad_vcf_reader.variant_dict
 
@@ -104,7 +105,7 @@ def germline_filter(args):
         for k, v in input_inter_gnomad_variant_dict_id_set_contig.items():
             total_filter_by_gnomad += len(input_inter_gnomad_variant_dict_id_set_contig[k])
 
-        print("Filtered by gnomAD resource: {}".format(total_filter_by_gnomad))
+        print("[INFO] Processing in {}: filtered by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
 
     # if apply_dbsnp_tagging and dbsnp_vcf_fn is not None:
     if not disable_dbsnp_tagging and dbsnp_vcf_fn is not None:
@@ -113,7 +114,7 @@ def germline_filter(args):
                                      keep_row_str=False,
                                      filter_tag=None,
                                      save_header=True)
-        print("Processing dbSNP resource...")
+        # print("Processing dbSNP resource...")
         dbsnp_vcf_reader.read_vcf()
         dbsnp_input_variant_dict = dbsnp_vcf_reader.variant_dict
 
@@ -136,7 +137,7 @@ def germline_filter(args):
         for k, v in input_inter_dbsnp_variant_dict_id_set_contig.items():
             total_filter_by_dbsnp += len(input_inter_dbsnp_variant_dict_id_set_contig[k])
 
-        print("Filtered by dbSNP resource: {}".format(total_filter_by_dbsnp))
+        print("[INFO] Processing in {}: filtered by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
 
     # if apply_pon_tagging and pon_vcf_fn is not None:
     if not disable_pon_tagging and pon_vcf_fn is not None:
@@ -145,7 +146,7 @@ def germline_filter(args):
                                       keep_row_str=False,
                                       filter_tag=None,
                                       save_header=True)
-        print("Processing 1000G PoN resource...")
+        # print("Processing 1000G PoN resource...")
         pon_vcf_reader.read_vcf()
         pon_input_variant_dict = pon_vcf_reader.variant_dict
 
@@ -168,7 +169,7 @@ def germline_filter(args):
         for k, v in input_inter_pon_variant_dict_id_set_contig.items():
             total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
 
-        print("Filtered by 1000G PoN resource: {}".format(total_filter_by_pon))
+        print("[INFO] Processing in {}: filtered by 1000G PoN resource: {}".format(ctg_name, total_filter_by_pon))
 
     if self_vcf_fn is not None:
         self_vcf_reader = VcfReader(vcf_fn=self_vcf_fn,
@@ -176,7 +177,7 @@ def germline_filter(args):
                                      keep_row_str=False,
                                      filter_tag=None,
                                      save_header=True)
-        print("Processing own PoN resource...")
+        # print("Processing own PoN resource...")
         self_vcf_reader.read_vcf()
         self_input_variant_dict = self_vcf_reader.variant_dict
 
@@ -199,7 +200,7 @@ def germline_filter(args):
         for k, v in input_inter_self_variant_dict_id_set_contig.items():
             total_filter_by_self += len(input_inter_self_variant_dict_id_set_contig[k])
 
-        print("Filtered by own PoN resource: {}".format(total_filter_by_self))
+        print("[INFO] Processing in  {}: filtered by own PoN resource: {}".format(ctg_name, total_filter_by_self))
 
     input_inter_all_variant_dict_id_set_contig = defaultdict(set)
 
@@ -216,9 +217,9 @@ def germline_filter(args):
     for k, v in germline_filter_variant_dict_id_set_contig.items():
         total_remain_passes += len(germline_filter_variant_dict_id_set_contig[k])
 
-    print("Germline filtering finished!")
+    # print("Germline filtering finished!")
 
-    print("Filtered by all database resources: {}, remained pass calls: {}".format(total_filter_by_all, total_remain_passes))
+    print("[INFO] Processing in {}: filtered by all database resources: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
 
     contigs_order = major_contigs_order + input_keys_list
     contigs_order_list = sorted(input_keys_list, key=lambda x: contigs_order.index(x))

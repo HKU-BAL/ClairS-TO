@@ -11,9 +11,9 @@ Email: rbluo@cs.hku.hk, zxzheng@cs.hku.hk, lchen@cs.hku.hk
 ## Introduction
 
 ClairS-TO is a tumor-only somatic variant caller without a paired normal sample and primarily for ONT long-read.
-It calculates the probability of a somatic variant candidate using **Bayes' Theorem**, **Affirmational Neural Network** and **Negational Neural Network**.  
+It calculates the probability of a somatic variant candidate using **Bayes' Theorem**, **Affirmative Neural Network** and **Negational Neural Network**.  
 
-Specifically, the Affirmational Neural Network predicts the somatic variant candidate being an A, C, G or T, while the Negational Neural Network predicts it **NOT** being an A, C, G or T. 
+Specifically, the Affirmative Neural Network predicts the somatic variant candidate being an A, C, G or T, while the Negational Neural Network predicts it **NOT** being an A, C, G or T. 
 In addition, the Bayes' Theorem is adopted to combine the predictions from the two Networks for final output.
 
 Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilized to tag germline variants.
@@ -62,7 +62,7 @@ Check [Usage](#Usage) for more options.
 
 ## Pre-trained Models
 
-ClairS-TO trained both Affirmational and Negational models using GIAB samples, and carry on benchmarking on HCC1395 tumor sample dataset. All models were trained with chr20 excluded (including only chr1-19, 21, 22). 
+ClairS-TO trained both Affirmative and Negational models using GIAB samples, and carry on benchmarking on HCC1395 tumor sample dataset. All models were trained with chr20 excluded (including only chr1-19, 21, 22). 
 
 |  Platform   |        Model name         |      Chemistry /Instruments      | Basecaller | Option (`-p/--platform`) |   Reference   | Aligner  |
 | :---------: |:-------------------------:|:--------------------------------:|:----------:| :-----------: | :------: | ----------- |
@@ -151,7 +151,7 @@ wget -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/api/micromamb
 mkdir micromamba
 tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 -C micromamba
 cd micromamba
-./bin/micromamba shell init -s bash -p ~/micromamba
+./bin/micromamba shell init -s bash -p .
 source ~/.bashrc
 ```
 
@@ -233,8 +233,8 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
 **Miscellaneous parameters:**
 
 ```bash
-  --pileup_affirmational_model_path PILEUP_AFFIRMATIONAL_MODEL_PATH                                                                                                                                                
-                        Specify the path to your own tumor-only somatic calling pileup affirmational model.                                                                                                                                                                                     
+  --pileup_affirmative_model_path PILEUP_AFFIRMATIVE_MODEL_PATH                                                                                                                                                
+                        Specify the path to your own tumor-only somatic calling pileup affirmative model.                                                                                                                                                                                     
   --pileup_negational_model_path PILEUP_NEGATIONAL_MODEL_PATH
                         Specify the path to your own tumor-only somatic calling pileup negational model.
   -c CTG_NAME, --ctg_name CTG_NAME

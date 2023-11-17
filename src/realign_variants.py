@@ -14,7 +14,6 @@ from shared.utils import str2bool
 file_directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 main_entry = os.path.join(file_directory, "{}.py".format(param.caller_name))
 
-
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -58,7 +57,7 @@ def extract_base(POS):
     min_bq = args.min_bq
     python = args.python
     qual = float(POS.qual) if POS.qual is not None else None
-    if POS.extra_infos is False or (qual is not None and qual >= 0.95):
+    if POS.extra_infos is False or (qual is not None and qual >= param.qual_dict['ilmn']):
         return ctg_name, pos, True, (-1, -1, -1, -1)
 
     ctg_range = "{}:{}-{}".format(ctg_name, pos, pos)

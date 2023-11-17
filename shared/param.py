@@ -1,5 +1,5 @@
 # parameters
-caller_name = "clairs-to"
+caller_name = "clairs_to"
 version = "0.0.1"
 
 from itertools import accumulate
@@ -28,14 +28,14 @@ max_tumor_depth = 84
 ont_tensor_max_depth = 128
 ont_max_depth = ont_tensor_max_depth + center_padding_depth
 min_bq_dict = {'ont': ont_min_bq, 'ilmn': min_bq, 'hifi': ont_min_bq}
-min_thred_qual = {'ont': 8, 'ont_r10': 8, 'ont_r9': 8, 'ilmn': 2, 'hifi': 5, 'hifi_sequel2': 5, 'hifi_revio': 5}
-best_thred_qual = {'ont': 16, 'ont_r10': 16, 'ont_r9': 16, 'ilmn': 4, 'hifi': 10, 'hifi_sequel2': 10, 'hifi_revio': 10}
+min_thred_qual = {'ont': 8, 'ont_r10': 8, 'ont_r9': 8, 'ilmn': 2, 'hifi': 2, 'hifi_sequel2': 2, 'hifi_revio': 2}
+best_thred_qual = {'ont': 16, 'ont_r10': 16, 'ont_r9': 16, 'ilmn': 4, 'hifi': 4, 'hifi_sequel2': 4, 'hifi_revio': 4}
 ont_max_tumor_depth = 75
 
 matrix_depth_dict = {'ont': ont_max_depth, 'ilmn': max_depth, 'hifi': 130}
 tumor_matrix_depth_dict = {'ont': ont_max_tumor_depth, 'ilmn': max_tumor_depth, 'hifi': 64}
 phase_tumor = {'ont': True, 'ilmn': False, 'hifi': True}
-qual_dict = {'ont': 8, 'ilmn': 2, 'hifi': 5}
+qual_dict = {'ont': 8, 'ilmn': 14, 'hifi': 8}
 af_dict = {'ont': 0.05, 'ilmn': 0.05, 'hifi': 0.05}
 
 pileup_channel = ['A', 'C', 'G', 'T', 'I', 'I1', 'D', 'D1', '*', 'a', 'c', 'g', 't', 'i', 'i1', 'd', 'd1', '#']

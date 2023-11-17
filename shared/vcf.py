@@ -16,8 +16,8 @@ vcf_header = dedent("""\
             ##source=ClairS-TO
             ##{}_version={}
             ##FILTER=<ID=PASS,Description="All filters passed">
-            ##FILTER=<ID=Germline,Description="Germline variant tagged by databases">
-            ##FILTER=<ID=LowQual,Description="Low quality variant">
+            ##FILTER=<ID=Germline,Description="Germline variant tagged by genetic databases">
+            ##FILTER=<ID=LowQual,Description="Low-quality variant">
             ##FILTER=<ID=RefCall,Description="Reference call">
             ##INFO=<ID=gnomAD,Description="Germline variant tagged by gnomAD resource">
             ##INFO=<ID=dbSNP,Description="Germline variant tagged by dnSNP resource">

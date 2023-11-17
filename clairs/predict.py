@@ -514,7 +514,7 @@ def main():
                         help="NACGT Tensor input filename, or stdin if not set")
 
     parser.add_argument('--chkpnt_fn_acgt', type=str, default=None,
-                        help="Input a trained affirmational model for calling, required")
+                        help="Input a trained affirmative model for calling, required")
 
     parser.add_argument('--chkpnt_fn_nacgt', type=str, default=None,
                         help="Input a trained negational model for calling, required")

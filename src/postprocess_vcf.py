@@ -53,8 +53,7 @@ def mark_low_qual(row, quality_score_for_pass):
         return row
     columns = row.split('\t')
     qual = float(columns[5])
-    # if quality_score_for_pass and qual <= quality_score_for_pass:
-    if quality_score_for_pass and qual < quality_score_for_pass:
+    if quality_score_for_pass and qual < float(quality_score_for_pass):
         columns[6] = "LowQual"
 
     return '\t'.join(columns)
@@ -78,8 +77,8 @@ def merge_vcf(args):
     if cmdline_file is not None and os.path.exists(cmdline_file):
         cmdline = open(cmdline_file).read().rstrip()
 
-    max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls if args.max_qual_filter_pileup_calls is not None else param.qual_dict[platform]
-    quality_score_for_pass = args.qual if args.qual is not None else param.qual_dict[platform]
+    max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls if args.max_qual_filter_pileup_calls is not None else param.min_thred_qual[platform]
+    quality_score_for_pass = args.qual if args.qual is not None else param.min_thred_qual[platform]
     af_cut_off = args.af if args.af is not None else param.af_dict[platform]
 
     pileup_input_variant_dict = defaultdict(str)
@@ -104,7 +103,7 @@ def merge_vcf(args):
             continue
 
         if max_qual_filter_pileup_calls is not None:
-            if qual < max_qual_filter_pileup_calls:
+            if qual < float(max_qual_filter_pileup_calls):
                 if prefer_recall:
                     columns[5] = columns[5]
                     columns = update_GQ(columns)
