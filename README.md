@@ -278,8 +278,6 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging.
   --disable_dbsnp_tagging
                         Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging.
-  --database_dir DATABASE_DIR
-                        Directory with gnomAD, 1000G PoN and dbSNP databases included.
   --use_own_pon_resource USE_OWN_PON_RESOURCE
                         Use user own PoN resource to tag germline calls.                  
 ```

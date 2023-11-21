@@ -381,7 +381,7 @@ def extract_pair_candidates(args):
     if not os.path.exists(os.path.join(candidates_folder, 'bed')):
         output = subprocess.run("mkdir -p {}".format(os.path.join(candidates_folder, 'bed')), shell=True)
     output_bed = open(bed_path, 'w')
-    # for pos in sorted(candidates_list):
+
     for pos in sorted(list(candidates_set)):
         output_bed.write('\t'.join([ctg_name, str(pos - 1), str(pos)]) + '\n')
     output_bed.close()

@@ -1,14 +1,6 @@
-import os
-import shlex
-import gc
-import subprocess
-import concurrent.futures
-
-from collections import Counter
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
-import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
@@ -107,7 +99,6 @@ def germline_filter(args):
 
         print("[INFO] Processing in {}: filtered by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
 
-    # if apply_dbsnp_tagging and dbsnp_vcf_fn is not None:
     if not disable_dbsnp_tagging and dbsnp_vcf_fn is not None:
         dbsnp_vcf_reader = VcfReader(vcf_fn=dbsnp_vcf_fn,
                                      ctg_name=ctg_name,
@@ -139,7 +130,6 @@ def germline_filter(args):
 
         print("[INFO] Processing in {}: filtered by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
 
-    # if apply_pon_tagging and pon_vcf_fn is not None:
     if not disable_pon_tagging and pon_vcf_fn is not None:
         pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
                                       ctg_name=ctg_name,
@@ -241,15 +231,15 @@ def germline_filter(args):
                             columns[7] += "gnomAD"
                         if pos_info in input_inter_dbsnp_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
-                                columns[7] += ","
+                                columns[7] += ";"
                             columns[7] += "dbSNP"
                         if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
-                                columns[7] += ","
+                                columns[7] += ";"
                             columns[7] += "PoN"
                         if pos_info in input_inter_self_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
-                                columns[7] += ","
+                                columns[7] += ";"
                             columns[7] += "OwnPoN"
                     row_str = '\t'.join(columns)
                     output.write(row_str)
@@ -271,16 +261,16 @@ def main():
                         help="Pileup VCF input")
 
     parser.add_argument('--gnomad_resource', type=str, default=None,
-                        help="GNOMAD resource")
+                        help="Use gnomAD dataset resource to tag germline variant")
 
     parser.add_argument('--dbsnp_resource', type=str, default=None,
-                        help="DBSNP resource")
+                        help="Use dbSNP dataset resource to tag germline variant")
 
     parser.add_argument('--pon_resource', type=str, default=None,
-                        help="PON resource")
+                        help="Use 1000G PoN dataset resource to tag germline variant")
 
     parser.add_argument('--use_own_pon_resource', type=str, default=None,
-                        help="Own PoN resource")
+                        help="Use user own PoN dataset resource to tag germline variant")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")
@@ -315,19 +305,19 @@ def main():
     parser.add_argument(
         "--disable_gnomad_tagging",
         action='store_true',
-        help="Disable gnomAD database resource to tag germline calls. Default: enable gnomad tagging."
+        help="Disable gnomAD database resource to tag germline calls. Default: enable gnomAD tagging."
     )
 
     parser.add_argument(
         "--disable_pon_tagging",
         action='store_true',
-        help="Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging."
+        help="Disable 1000G PoN database resource to tag germline calls. Default: enable 1000G PoN tagging."
     )
 
     parser.add_argument(
         "--disable_dbsnp_tagging",
         action='store_true',
-        help="Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging."
+        help="Disable dbSNP database resource to tag germline calls. Default: enable dbSNP tagging."
     )
 
     parser.add_argument(
