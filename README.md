@@ -14,7 +14,7 @@ ClairS-TO is a tumor-only somatic variant caller without a paired normal sample 
 It calculates the probability of a somatic variant candidate using **Bayes' Theorem**, **Affirmative Neural Network** and **Negational Neural Network**.  
 
 Specifically, the Affirmative Neural Network predicts the somatic variant candidate being an A, C, G or T, while the Negational Neural Network predicts it **NOT** being an A, C, G or T. 
-In addition, the Bayes' Theorem is adopted to combine the predictions from the two Networks for final output.
+In addition, the Bayes' Theorem is adopted to combine the predictions from the two networks to maximize the performance.
 
 Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilized to tag germline variants.
 
@@ -68,7 +68,7 @@ ClairS-TO trained both Affirmative and Negational models using GIAB samples, and
 | :---------: |:-------------------------:|:--------------------------------:|:----------:| :-----------: | :------: | ----------- |
 | ONT | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           |   Dorado   | `ont_r10_dorado_5khz` | GRCh38_no_alt | Minimap2 |
 | ONT | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           |   Dorado   | `ont_r10_dorado_4khz` | GRCh38_no_alt | Minimap2 |
-| ONT | r1041_e82_400bps_sup_g615 |              R10.4.1             |   Guppy6   |   `ont_r10_guppy` | GRCh38_no_alt | Minimap2 |
+| ONT | r1041_e82_400bps_sup_g615 |              R10.4.1, 4khz             |   Guppy6   |   `ont_r10_guppy` | GRCh38_no_alt | Minimap2 |
 |  Illumina   |           ilmn            |          NovaSeq/HiseqX          |     -      |          `ilmn`          |    GRCh38     | BWA-MEM  |
 | PacBio HIFI |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | `hifi_revio` | GRCh38_no_alt | Minimap2 |
 
@@ -132,16 +132,6 @@ singularity exec \
 
 Check here to install the tools step by step.
 
-**Anaconda install**:
-
-Please install anaconda using the official [guide](https://docs.anaconda.com/anaconda/install) or using the commands below:
-
-```bash
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-chmod +x ./Miniconda3-latest-Linux-x86_64.sh 
-./Miniconda3-latest-Linux-x86_64.sh
-```
-
 **Micromamba install (Recommended)**:
 
 Please install micromamba using the official [guide](https://mamba.readthedocs.io/en/latest/micromamba-installation.html) or using the commands below:
@@ -153,6 +143,17 @@ tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 -C micromamba
 cd micromamba
 ./bin/micromamba shell init -s bash -p .
 source ~/.bashrc
+```
+
+
+**Or Anaconda install**:
+
+Please install anaconda using the official [guide](https://docs.anaconda.com/anaconda/install) or using the commands below:
+
+```bash
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+chmod +x ./Miniconda3-latest-Linux-x86_64.sh 
+./Miniconda3-latest-Linux-x86_64.sh
 ```
 
 **Install ClairS-TO using anaconda (or micromamba) step by step:**
@@ -263,7 +264,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --include_all_ctgs    Call variants on all contigs, otherwise call in chr{1..22} and {1..22}.
   --print_ref_calls     Show reference calls (0/0) in VCF file.
   --disable_print_germline_calls
-                        Disable print germline calls. Default: enable germline calls printing.
+                        Disable printing germline calls. Default: enable germline calls printing.
   -d, --dry_run         Print the commands that will be ran.
   --python PYTHON       Absolute path of python, python3 >= 3.9 is required.
   --pypy PYPY           Absolute path of pypy3, pypy3 >= 3.6 is required.
@@ -277,8 +278,10 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging.
   --disable_dbsnp_tagging
                         Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging.
+  --database_dir DATABASE_DIR
+                        Directory with gnomAD, 1000G PoN and dbSNP databases included.
   --use_own_pon_resource USE_OWN_PON_RESOURCE
-                        Use own PoN resource to tag germline calls.                  
+                        Use user own PoN resource to tag germline calls.                  
 ```
 
 #### Call SNVs in one or mutiple chromosomes using the `-C/--ctg_name` parameter
@@ -317,9 +320,9 @@ Then:
 
 ------
 
-## Genetic Databases
+## Tagging Germline Variant using Genetic Databases
 ClairS-TO utilizes genetic databases (Default: gnomAD, dbSNP, and 1000G PoN) to tag germline variants. 
-Users can choose any resource from preset databases or provide their own PoN resource to achieve germline tagging.
+Users can choose any resource from preset databases or provide their own PoN resource(using `--use_own_pon_resource` option) to apply germline tagging.
 
 | Database  | Source |                                                   Visiting URL                                                   |       Visiting Time       | Original Sites |  Filtering Criteria  | Remaining Sites |    Remaining Columns    |
 |:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:--------------------:|:---------------:|:-----------------------:|
