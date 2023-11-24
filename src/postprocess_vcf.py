@@ -63,7 +63,7 @@ def update_GQ(columns):
     INFO = columns[8]
     FORMAT = columns[9].split(':')
     gq_index = INFO.split(':').index("GQ")
-    FORMAT[gq_index] = str(int(float(columns[5])))
+    FORMAT[gq_index] = str(int(float(columns[5]))) if float(columns[5]) > 0.0 else FORMAT[gq_index]
     columns[9] = ':'.join(FORMAT)
     return columns
 

@@ -33,6 +33,8 @@ import os
 import logging
 import shlex
 
+sys.path.insert(0, '/autofs/bal34/lchen/home/ClairST/ClairS-TO')
+
 from time import time
 from argparse import ArgumentParser, SUPPRESS
 from subprocess import run
@@ -123,7 +125,8 @@ def output_vcf_from_probability(
         probabilities_nt,
         likelihood_data_info_list,
         output_config=None,
-        vcf_writer=None
+        vcf_writer=None,
+        output_file=None
 ):
     def decode_alt_info(alt_info):
         alt_info = alt_info.rstrip().split('-')
@@ -190,6 +193,23 @@ def output_vcf_from_probability(
 
     probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t])
     normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
+
+    print(''.join([str(item).ljust(25) for item in
+                     [" ", "p(Aff|Neg)", "p(Neg|Aff)", "p(Aff)", "p(Neg)", "Normalized_p(Aff|Neg)"]]),
+          file=output_file)
+    print(''.join([str(item).ljust(25) for item in
+                     ["A", probs_is_a, likelihood_a_na_weight, probabilities_is_a, probabilities_is_na, normalized_probs_is_acgt[0]]]),
+          file=output_file)
+    print(''.join([str(item).ljust(25) for item in
+                     ["C", probs_is_c, likelihood_c_nc_weight, probabilities_is_c, probabilities_is_nc, normalized_probs_is_acgt[1]]]),
+          file=output_file)
+    print(''.join([str(item).ljust(25) for item in
+                     ["G", probs_is_g, likelihood_g_ng_weight, probabilities_is_g, probabilities_is_ng, normalized_probs_is_acgt[2]]]),
+          file=output_file)
+    print(''.join([str(item).ljust(25) for item in
+                     ["T", probs_is_t, likelihood_t_nt_weight, probabilities_is_t, probabilities_is_nt, normalized_probs_is_acgt[3]]]),
+          file=output_file)
+    print('\n', file=output_file)
 
     p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
 
@@ -260,6 +280,10 @@ def output_vcf_from_probability(
         elif best_match_alt[0] == 'D':
             alternate_base = reference_base
             reference_base += best_match_alt[2:]
+
+    if (not output_config.is_show_reference and is_reference) or (
+            not is_reference and reference_base == alternate_base):
+        return
 
     if reference_base is None or alternate_base is None:
         return
@@ -480,7 +504,11 @@ def call_variants_from_probability(args):
     else:
         fo = sys.stdin
 
-    likelihood_data_fn = args.likelihood_matrix_data
+    # likelihood_data_fn = args.likelihood_matrix_data
+    # likelihood_data = np.loadtxt(likelihood_data_fn)
+
+    likelihood_data_fn = os.path.join('/autofs/bal34/lchen/home/ClairST-Output/resources', 'likelihood_matrixs',
+                                      'ont_r10_guppy', '10_equal_distance_division.txt')
     likelihood_data = np.loadtxt(likelihood_data_fn)
 
     likelihood_data_info_list = []
@@ -540,6 +568,9 @@ def call_variants_from_probability(args):
     likelihood_data_info_list.append(likelihood_t_points_with_zero_one)
     likelihood_data_info_list.append(likelihood_nt_points_with_zero_one)
 
+    output_fn = '/autofs/bal13/lchen/home/ClairS-TO_results/ont_r10_guppy/posterior_output/posterior_sample_output.txt'
+    output_file = open(output_fn, 'w')
+
     for row_id, row in enumerate(fo):
         row = row.rstrip().split('\t')
         chromosome, position, reference_base, tumor_alt_info, prediction_a, prediction_c, prediction_g, prediction_t, \
@@ -568,6 +599,7 @@ def call_variants_from_probability(args):
             likelihood_data_info_list,
             output_config=output_config,
             vcf_writer=vcf_writer,
+            output_file=output_file
         )
 
     logging.info("[INFO] Total time elapsed: %.2f s" % (time() - variant_call_start_time))

@@ -506,10 +506,14 @@ def check_args(args):
         args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
 
     if args.gnomad_resource is None:
-        args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad_af_0.01_resource.vcf.gz')
+        # args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad_af_0.01_resource.vcf.gz')
+        args.gnomad_resource = "/autofs/bal34/lchen/home/ClairST-Output/resources/germline_filtering_resources/gnomad_af_0.01.vcf"
+        # args.gnomad_resource = "/autofs/bal34/lchen/home/ClairST-Output/resources/germline_filtering_resources/gnomad_af_0.01_resource.vcf"
 
     if args.dbsnp_resource is None:
-        args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp_non_somatic_resource.vcf.gz')
+        # args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp_non_somatic_resource.vcf.gz')
+        args.dbsnp_resource = "/autofs/bal34/lchen/home/ClairST-Output/resources/germline_filtering_resources/dbsnp_nonsomatic.vcf"
+        # args.dbsnp_resource = "/autofs/bal34/lchen/home/ClairST-Output/resources/germline_filtering_resources/dbsnp_non_somatic_resource.vcf"
 
     if args.pon_resource is None:
         args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g_pon_resource.vcf.gz')
@@ -678,122 +682,122 @@ def somatic_calling(args):
     except subprocess.CalledProcessError as e:
         time = ''
 
-    #Pileup calling
-    #STEP 1: EXTRACT CANDIDATES
-    echo_list.append("[INFO] STEP {}: Extract Variant Candidates from Tumor BAM".format(step))
-    step += 1
-    ec_command = '( ' + time + args.parallel
-    ec_command += ' --joblog ' + args.output_dir + '/logs/parallel_1_extract_tumor_candidates.log'
-    ec_command += ' -C " " -j ' + str(args.threads)
-    ec_command += ' ' + args.pypy + ' ' + main_entry + ' extract_candidates_calling'
-    ec_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-    ec_command += ' --ref_fn ' + args.ref_fn
-    ec_command += ' --samtools ' + args.samtools
-    ec_command += ' --snv_min_af ' + str(args.snv_min_af)
-    ec_command += ' --indel_min_af ' + str(args.indel_min_af)
-    ec_command += ' --chunk_id {2} '
-    ec_command += ' --chunk_num {3} '
-    ec_command += ' --ctg_name {1} '
-    ec_command += ' --platform ' + args.platform
-    ec_command += ' --min_coverage ' + str(args.min_coverage)
-    ec_command += ' --bed_fn ' + os.path.join(args.output_dir, 'tmp', 'split_beds', '{1}')
-    ec_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
-    ec_command += ' --output_depth True '
-    ec_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
-    ec_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
-    ec_command += ' :::: ' + os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
-    ec_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/1_EC.log'
-    ec_command += ' && ' + args.pypy + ' ' + main_entry + ' concat_files'
-    ec_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
-    ec_command += ' --input_prefix ' + "CANDIDATES_FILE_"
-    ec_command += ' --output_fn CANDIDATES_FILES '
-    commands_list.append(ec_command)
-
-    ##STEP 2: CREATE PILEUP TENSOR
-    echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
-    echo_list[-1] += ("[INFO] Create Tensors for Affirmative Model")
-    cpt_aff_command = '( ' + time + args.parallel
-    cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative.log'
-    cpt_aff_command += ' -j ' + str(args.threads)
-    cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
-    cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-    cpt_aff_command += ' --ref_fn ' + args.ref_fn
-    cpt_aff_command += ' --ctg_name {1/.}'
-    cpt_aff_command += ' --samtools ' + args.samtools
-    cpt_aff_command += ' --candidates_bed_regions {1}'
-    cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
-    cpt_aff_command += ' --platform ' + args.platform
-    cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative.log'
-    commands_list += [cpt_aff_command]
-
-    if args.platform == 'ilmn':
-        echo_list.append("[INFO] Create Tensors for Negational Model")
-        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/')]
-
-    else:
-        echo_list.append("[INFO] Create Tensors for Negational Model")
-        cpt_neg_command = '( ' + time + args.parallel
-        cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational.log'
-        cpt_neg_command += ' -j ' + str(args.threads)
-        cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
-        cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
-        cpt_neg_command += ' --ref_fn ' + args.ref_fn
-        cpt_neg_command += ' --ctg_name {1/.}'
-        cpt_neg_command += ' --samtools ' + args.samtools
-        cpt_neg_command += ' --candidates_bed_regions {1}'
-        cpt_neg_command += ' --min_bq 0'
-        cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
-        cpt_neg_command += ' --platform ' + args.platform
-        cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational.log'
-        commands_list += [cpt_neg_command]
-
-    ## STEP 3: PREDICT
-    echo_list.append("[INFO] Pileup Model Prediction along with Affirmative & Negational Model")
-    p_predict_command = '( ' + time + args.parallel
-    p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
-    p_predict_command += ' -j ' + str(args.threads)
-    p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
-    p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
-    p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
-    p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-    p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmative_model_path
-    p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
-    p_predict_command += ' --use_gpu ' + str(args.use_gpu)
-    p_predict_command += ' --platform ' + args.platform
-    p_predict_command += ' --ctg_name {1/.}'
-    p_predict_command += ' --pileup '
-    p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
-    p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
-    commands_list += [p_predict_command]
-
-    ## STEP 4: CALL VARIANTS
-    echo_list.append("[INFO] Pileup Model Calling Variants")
-    cv_command = '( ' + time + args.parallel
-    cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants.log'
-    cv_command += ' -j ' + str(args.threads)
-    cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
-    cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-    cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
-    cv_command += ' --platform ' + args.platform
-    cv_command += ' --likelihood_matrix_data {} '.format(args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
-    cv_command += ' --show_ref ' if args.print_ref_calls else ""
-    cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS.log'
-    commands_list += [cv_command]
-
-    # STEP 5: MERGE CALLING VCFs
-    echo_list.append("[INFO] Merge Pileup VCFs")
-    p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
-    p_mv_command += ' --ref_fn ' + args.ref_fn
-    p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
-    p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
-    p_mv_command += ' --vcf_fn_prefix ' + 'p_'
-    p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/pileup.vcf'
-    commands_list += [p_mv_command]
-
+    # #Pileup calling
+    # #STEP 1: EXTRACT CANDIDATES
+    # echo_list.append("[INFO] STEP {}: Extract Variant Candidates from Tumor BAM".format(step))
+    # step += 1
+    # ec_command = '( ' + time + args.parallel
+    # ec_command += ' --joblog ' + args.output_dir + '/logs/parallel_1_extract_tumor_candidates.log'
+    # ec_command += ' -C " " -j ' + str(args.threads)
+    # ec_command += ' ' + args.pypy + ' ' + main_entry + ' extract_candidates_calling'
+    # ec_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+    # ec_command += ' --ref_fn ' + args.ref_fn
+    # ec_command += ' --samtools ' + args.samtools
+    # ec_command += ' --snv_min_af ' + str(args.snv_min_af)
+    # ec_command += ' --indel_min_af ' + str(args.indel_min_af)
+    # ec_command += ' --chunk_id {2} '
+    # ec_command += ' --chunk_num {3} '
+    # ec_command += ' --ctg_name {1} '
+    # ec_command += ' --platform ' + args.platform
+    # ec_command += ' --min_coverage ' + str(args.min_coverage)
+    # ec_command += ' --bed_fn ' + os.path.join(args.output_dir, 'tmp', 'split_beds', '{1}')
+    # ec_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
+    # ec_command += ' --output_depth True '
+    # ec_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
+    # ec_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
+    # ec_command += ' :::: ' + os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
+    # ec_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/1_EC.log'
+    # ec_command += ' && ' + args.pypy + ' ' + main_entry + ' concat_files'
+    # ec_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
+    # ec_command += ' --input_prefix ' + "CANDIDATES_FILE_"
+    # ec_command += ' --output_fn CANDIDATES_FILES '
+    # commands_list.append(ec_command)
+    #
+    # ##STEP 2: CREATE PILEUP TENSOR
+    # echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
+    # echo_list[-1] += ("[INFO] Create Tensors for Affirmative Model")
+    # cpt_aff_command = '( ' + time + args.parallel
+    # cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative.log'
+    # cpt_aff_command += ' -j ' + str(args.threads)
+    # cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+    # cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+    # cpt_aff_command += ' --ref_fn ' + args.ref_fn
+    # cpt_aff_command += ' --ctg_name {1/.}'
+    # cpt_aff_command += ' --samtools ' + args.samtools
+    # cpt_aff_command += ' --candidates_bed_regions {1}'
+    # cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+    # cpt_aff_command += ' --platform ' + args.platform
+    # cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    # cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative.log'
+    # commands_list += [cpt_aff_command]
+    #
+    # if args.platform == 'ilmn':
+    #     echo_list.append("[INFO] Create Tensors for Negational Model")
+    #     commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/')]
+    #
+    # else:
+    #     echo_list.append("[INFO] Create Tensors for Negational Model")
+    #     cpt_neg_command = '( ' + time + args.parallel
+    #     cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational.log'
+    #     cpt_neg_command += ' -j ' + str(args.threads)
+    #     cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+    #     cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+    #     cpt_neg_command += ' --ref_fn ' + args.ref_fn
+    #     cpt_neg_command += ' --ctg_name {1/.}'
+    #     cpt_neg_command += ' --samtools ' + args.samtools
+    #     cpt_neg_command += ' --candidates_bed_regions {1}'
+    #     cpt_neg_command += ' --min_bq 0'
+    #     cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+    #     cpt_neg_command += ' --platform ' + args.platform
+    #     cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    #     cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational.log'
+    #     commands_list += [cpt_neg_command]
+    #
+    # ## STEP 3: PREDICT
+    # echo_list.append("[INFO] Pileup Model Prediction along with Affirmative & Negational Model")
+    # p_predict_command = '( ' + time + args.parallel
+    # p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
+    # p_predict_command += ' -j ' + str(args.threads)
+    # p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
+    # p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+    # p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+    # p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+    # p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmative_model_path
+    # p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
+    # p_predict_command += ' --use_gpu ' + str(args.use_gpu)
+    # p_predict_command += ' --platform ' + args.platform
+    # p_predict_command += ' --ctg_name {1/.}'
+    # p_predict_command += ' --pileup '
+    # p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
+    # p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    # p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
+    # commands_list += [p_predict_command]
+    #
+    # ## STEP 4: CALL VARIANTS
+    # echo_list.append("[INFO] Pileup Model Calling Variants")
+    # cv_command = '( ' + time + args.parallel
+    # cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants.log'
+    # cv_command += ' -j ' + str(args.threads)
+    # cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
+    # cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+    # cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
+    # cv_command += ' --platform ' + args.platform
+    # cv_command += ' --likelihood_matrix_data {} '.format(args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
+    # cv_command += ' --show_ref ' if args.print_ref_calls else ""
+    # cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
+    # cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS.log'
+    # commands_list += [cv_command]
+    #
+    # # STEP 5: MERGE CALLING VCFs
+    # echo_list.append("[INFO] Merge Pileup VCFs")
+    # p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
+    # p_mv_command += ' --ref_fn ' + args.ref_fn
+    # p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
+    # p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+    # p_mv_command += ' --vcf_fn_prefix ' + 'p_'
+    # p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/pileup.vcf'
+    # commands_list += [p_mv_command]
+    #
     if not args.disable_germline_tagging:
         # STEP 6: GERMLINE TAGGING
         echo_list.append("[INFO] STEP 3: Germline Tagging with Databases")
@@ -1081,7 +1085,7 @@ def somatic_parser():
         "--output_prefix",
         type=str,
         default="output",
-        help="Prefix for output VCF filename. Default: output."
+        help="Prefix for output VCF filename. Default: output"
     )
 
     optional_params.add_argument(

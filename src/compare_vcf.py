@@ -438,9 +438,6 @@ def compare_vcf(args):
           file=output_file)
     print(''.join([str(item).ljust(13) for item in ["SNV", snv_pre, snv_rec, snv_f1, tp_snv, fp_snv, fn_snv, tp_fn_count]]),
           file=output_file)
-    # print(' '.join([str(item) for item in ["SNV", snv_pre, snv_rec, snv_f1, tp_snv, fp_snv, fn_snv, tp_fn_count]]),
-    #       file=output_file)
-    # print('\n')
     if args.benchmark_indel:
         indel_pre, indel_rec, indel_f1 = cal_metrics(tp=tp_indel, fp=fp_indel, fn=fn_indel)
         ins_pre, ins_rec, ins_f1 = cal_metrics(tp=tp_ins, fp=fp_ins, fn=fn_ins)
@@ -609,9 +606,6 @@ def main():
                         help=SUPPRESS)
 
     parser.add_argument('--log_som', type=str, default=None,
-                        help=SUPPRESS)
-
-    parser.add_argument('--caller', type=str, default=None,
                         help=SUPPRESS)
 
     parser.add_argument('--output_best_f1_score', action='store_true',
