@@ -508,16 +508,16 @@ def main():
                         help="Select the sequencing platform of the input. Default: %(default)s")
 
     parser.add_argument('--tensor_fn_acgt', type=str, default="PIPE",
-                        help="ACGT Tensor input filename, or stdin if not set")
+                        help="Tensor input path of the affirmative model, or stdin if not set")
 
     parser.add_argument('--tensor_fn_nacgt', type=str, default="PIPE",
-                        help="NACGT Tensor input filename, or stdin if not set")
+                        help="Tensor input path of the negational model, or stdin if not set")
 
     parser.add_argument('--chkpnt_fn_acgt', type=str, default=None,
-                        help="Input a trained affirmative model for calling, required")
+                        help="Model path of the affirmative model, required")
 
     parser.add_argument('--chkpnt_fn_nacgt', type=str, default=None,
-                        help="Input a trained negational model for calling, required")
+                        help="Model path of the negational model, required")
 
     parser.add_argument('--call_fn', type=str, default=None,
                         help="VCF output filename, or stdout if not set")

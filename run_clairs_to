@@ -518,9 +518,9 @@ def check_args(args):
     if args.pon_resource is None:
         args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g_pon_resource.vcf.gz')
 
-    args.gnomad_resource = file_path_from(file_name=args.gnomad_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
-    args.dbsnp_resource = file_path_from(file_name=args.dbsnp_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
-    args.pon_resource = file_path_from(file_name=args.pon_resource, exit_on_not_found=False, is_directory=False, allow_none=True)
+    args.gnomad_resource = file_path_from(file_name=args.gnomad_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
+    args.dbsnp_resource = file_path_from(file_name=args.dbsnp_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
+    args.pon_resource = file_path_from(file_name=args.pon_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
@@ -1109,7 +1109,7 @@ def somatic_parser():
     optional_params.add_argument(
         "--disable_print_germline_calls",
         action='store_true',
-        help="Disable print germline calls. Default: enable germline calls printing."
+        help="Disable printing germline calls. Default: enable germline calls printing."
     )
 
     optional_params.add_argument(

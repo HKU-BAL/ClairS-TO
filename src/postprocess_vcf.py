@@ -30,11 +30,10 @@
 
 import subprocess
 import os
-from math import log, e
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
-from shared.vcf import VcfReader, VcfWriter
+from shared.vcf import VcfWriter
 import shared.param as param
 from shared.utils import log_warning, str2bool, str_none
 
@@ -128,8 +127,6 @@ def merge_vcf(args):
                 af_filter_count += 1
                 continue
 
-        # if (ctg_name, int(pos)) in pass_pileup_set:
-        QUAL = qual
         columns[5] = columns[5]
         #update GQ to phred
         columns = update_GQ(columns)
@@ -166,9 +163,6 @@ def merge_vcf(args):
     if no_vcf_output:
         print(log_warning("[WARNING] No variant found, please check the setting"))
 
-    # if prefer_recall:
-    #     print("[INFO] --prefer_recall enabled! Total recalled records: ", recall_count)
-
     contigs_order = major_contigs_order + list(contig_dict.keys())
     contigs_order_list = sorted(contig_dict.keys(), key=lambda x: contigs_order.index(x))
 
@@ -201,7 +195,7 @@ def merge_vcf(args):
             subprocess.run("cd {} && ln -sf {} snv.vcf".format(output_dir, file_name), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def main():
-    parser = ArgumentParser(description="Sort pileup VCF for final output")
+    parser = ArgumentParser(description="VCF post-processing")
 
     parser.add_argument('--platform', type=str, default='ont',
                         help="Select the sequencing platform of the input. Default: %(default)s")
@@ -229,7 +223,7 @@ def main():
                         help="EXPERIMENTAL: If set, variants Phread quality with >=$qual will be marked 'PASS', or 'LowQual' otherwise")
 
     parser.add_argument('--enable_indel_calling', type=str2bool, default=False,
-                        help="EXPERIMENTAL: Enable Indel calling, make the snv output vcf file soft link")
+                        help=SUPPRESS)
 
     parser.add_argument('--af', type=float, default=None,
                         help=SUPPRESS)

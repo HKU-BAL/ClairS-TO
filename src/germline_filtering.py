@@ -424,16 +424,16 @@ def main():
                         help="Pileup VCF input")
 
     parser.add_argument('--gnomad_resource', type=str, default=None,
-                        help="GNOMAD resource")
+                        help="Use gnomAD dataset resource to tag germline variant")
 
     parser.add_argument('--dbsnp_resource', type=str, default=None,
-                        help="DBSNP resource")
+                        help="Use dbSNP dataset resource to tag germline variant")
 
     parser.add_argument('--pon_resource', type=str, default=None,
-                        help="PON resource")
+                        help="Use 1000G PoN dataset resource to tag germline variant")
 
     parser.add_argument('--use_own_pon_resource', type=str, default=None,
-                        help="Own PoN resource")
+                        help="Use user own PoN dataset resource to tag germline variant")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")
@@ -468,19 +468,19 @@ def main():
     parser.add_argument(
         "--disable_gnomad_tagging",
         action='store_true',
-        help="Disable gnomAD database resource to tag germline calls. Default: enable gnomad tagging."
+        help="Disable gnomAD database resource to tag germline calls. Default: enable gnomAD tagging."
     )
 
     parser.add_argument(
         "--disable_pon_tagging",
         action='store_true',
-        help="Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging."
+        help="Disable 1000G PoN database resource to tag germline calls. Default: enable 1000G PoN tagging."
     )
 
     parser.add_argument(
         "--disable_dbsnp_tagging",
         action='store_true',
-        help="Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging."
+        help="Disable dbSNP database resource to tag germline calls. Default: enable dbSNP tagging."
     )
 
     parser.add_argument(
