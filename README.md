@@ -250,7 +250,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Enable hybrid calling mode that combines the de novo calling results and genotyping results at the positions in the VCF file given.
   -q QUAL, --qual QUAL  If set, variants with >QUAL will be marked as PASS, or LowQual otherwise.
   --snv_min_af SNV_MIN_AF                           
-                        Minimal SNV AF required for a variant to be called. Decrease SNV_MIN_AF might increase a bit of sensitivity, but in trade of precision, speed and accuracy. Default: 0.05.
+                        Minimal SNV AF required for a variant to be called. Decrease SNV_MIN_AF might increase a bit of sensitivity, but in trade of precision, speed, and accuracy. Default: 0.05.
   --min_coverage MIN_COVERAGE
                         Minimal coverage required for a variant to be called. Default: 4.
   --chunk_size CHUNK_SIZE                           
@@ -260,7 +260,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --output_prefix OUTPUT_PREFIX
                         Prefix for output VCF filename. Default: output.
   --remove_intermediate_dir
-                        Remove intermediate directory before finishing to save disk space.
+                        Remove the intermediate directory before finishing to save disk space.
   --include_all_ctgs    Call variants on all contigs, otherwise call in chr{1..22} and {1..22}.
   --print_ref_calls     Show reference calls (0/0) in VCF file.
   --disable_print_germline_calls
@@ -282,7 +282,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Use user own PoN resource to tag germline calls.                  
 ```
 
-#### Call SNVs in one or mutiple chromosomes using the `-C/--ctg_name` parameter
+#### Call SNVs in one or multiple chromosomes using the `-C/--ctg_name` parameter
 
 ```bash
 ./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -C chr21,chr22
