@@ -1,22 +1,24 @@
-<!-- # ClairS-TO - a deep-learning method for tumor-only long-read somatic small variant calling -->
-# ClairS-TO
+# ClairS-TO - a deep-learning method for tumor-only somatic small variant calling
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 Contact: Ruibang Luo, Zhenxian Zheng, Lei Chen  
-Email: rbluo@cs.hku.hk, zxzheng@cs.hku.hk, lchen@cs.hku.hk 
+Email: {rbluo,zxzheng,lchen}@cs.hku.hk 
 
 ------
 
 ## Introduction
 
-ClairS-TO is a tumor-only somatic variant caller without a paired normal sample and primarily for ONT long-read.
-It calculates the probability of a somatic variant candidate using **Bayes' Theorem**, **Affirmative Neural Network** and **Negational Neural Network**.  
+ClairS-TO (Somatic Tumor-Only) is a tool in the Clair series to support long-read somatic small variant calling with only tumor samples available.
 
-Specifically, the Affirmative Neural Network predicts the somatic variant candidate being an A, C, G or T, while the Negational Neural Network predicts it **NOT** being an A, C, G or T. 
-In addition, the Bayes' Theorem is adopted to combine the predictions from the two networks to maximize the performance.
+Without a normal sample, non-somatic noises cannot be identified by finding common signals between a paired tumor and normal. The variant caller itself needs to be more proficient in telling noises from somatic signals.
 
-Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilized to tag germline variants.
+In ClairS-TO, we use an ensemble of two neural networks with opposite objectives. With the same input, an Affirmative NN determines how likely a candidate is a somatic variant - P(*Y<sub>Aff</sub>*), and a Negational NN determines how likely a candidate is NOT a somatic variant - P(*Y<sub>Neg</sub>*). A conditional probability P(*Y<sub>Aff</sub>* | *Y<sub>Neg</sub>*) that determines how likely a candidate is a somatic variant given that the probability that the candidate is not a somatic variant is calculated from the probability of both networks. A somatic variant candidate that doesn't look like a noise usually has a high P(*Y<sub>Aff</sub>*) but a low P(*Y<sub>Neg</sub>*), while a somatic variant candidate that can also be a noise can have both a high P(*Y<sub>Aff</sub>*) and a high P(*Y<sub>Neg</sub>*).
+
+Below is a workflow of ClairS-TO.
+![Clair3 Workflow](docs/ClairSTOArch.png)
+
+Like other tumor-only somatic variant callers, ClairS-TO accepts public databases (i.e., gnomAD, dbSNP, and 1000G PoN) and private PoN as input to remove non-somatic variants.
 
 ------
 
@@ -30,6 +32,7 @@ Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilize
 - [Quick Demo](#quick-demo)
 - [Pre-trained Models](#pre-trained-models)
 - [Usage](#usage)
+- [Tagging non-somatic variant using public databases](#tagging-non-somatic-variant-using-public-databases)
 - [Disclaimer](#disclaimer)
 
 ------
@@ -43,7 +46,7 @@ Particularly, genetic databases (e.g., gnomAD, dbSNP, and 1000G PoN) are utilize
 ## Quick Demo
 
 - Oxford Nanopore (ONT) [Q20+](https://nanoporetech.com/q20plus-chemistry) data as input, see [ONT Quick Demo](docs/ont_quick_demo.md).
-- PacBio HiFi [Revio](https://www.pacb.com/revio/) data as input, see [PacBio HiFi Quick Demo](docs/pacbio_hifi_quick_demo.md).
+- PacBio HiFi Revio data as input, see [PacBio HiFi Quick Demo](docs/pacbio_hifi_quick_demo.md).
 - Illumina NGS data as input, see [Illumina Quick Demo](docs/illumina_quick_demo.md).
 
 ### Quick start
@@ -132,7 +135,7 @@ singularity exec \
 
 Check here to install the tools step by step.
 
-**Micromamba install (Recommended)**:
+**Use Micromamba (Recommended)**:
 
 Please install micromamba using the official [guide](https://mamba.readthedocs.io/en/latest/micromamba-installation.html) or using the commands below:
 
@@ -146,7 +149,7 @@ source ~/.bashrc
 ```
 
 
-**Or Anaconda install**:
+**Or use Anaconda**:
 
 Please install anaconda using the official [guide](https://docs.anaconda.com/anaconda/install) or using the commands below:
 
@@ -156,7 +159,7 @@ chmod +x ./Miniconda3-latest-Linux-x86_64.sh
 ./Miniconda3-latest-Linux-x86_64.sh
 ```
 
-**Install ClairS-TO using anaconda (or micromamba) step by step:**
+**Install ClairS-TO using micromamba step by step:**
 
 ```bash
 # create and activate an environment named clairs-to
@@ -253,6 +256,16 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Minimal SNV AF required for a variant to be called. Decrease SNV_MIN_AF might increase a bit of sensitivity, but in trade of precision, speed, and accuracy. Default: 0.05.
   --min_coverage MIN_COVERAGE
                         Minimal coverage required for a variant to be called. Default: 4.
+  --disable_germline_tagging
+                        Disable non-somatic variants tagging. Default: enable non-somatic variants tagging.
+  --disable_gnomad_tagging
+                        Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD.
+  --disable_pon_tagging
+                        Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN.
+  --disable_dbsnp_tagging
+                        Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbsnp.
+  --use_own_pon_resource OWN_PON_VCF_FN
+                        Use own variants in VCF format for tagging.
   --chunk_size CHUNK_SIZE                           
                         The size of each chuck for parallel processing. Default: 5000000.
   -s SAMPLE_NAME, --sample_name SAMPLE_NAME
@@ -270,16 +283,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --pypy PYPY           Absolute path of pypy3, pypy3 >= 3.6 is required.
   --samtools SAMTOOLS   Absolute path of samtools, samtools version >= 1.10 is required.
   --parallel PARALLEL   Absolute path of parallel, parallel >= 20191122 is required.
-  --disable_germline_tagging
-                        Disable germline tagging to tag germline calls. Default: enable germline tagging.
-  --disable_gnomad_tagging
-                        Disable gnomAD database resource to tag germline calls. Default: enable gnomad tagging.
-  --disable_pon_tagging
-                        Disable 1000G PoN database resource to tag germline calls. Default: enable pon tagging.
-  --disable_dbsnp_tagging
-                        Disable dbSNP database resource to tag germline calls. Default: enable dbsnp tagging.
-  --use_own_pon_resource USE_OWN_PON_RESOURCE
-                        Use user own PoN resource to tag germline calls.                  
+              
 ```
 
 #### Call SNVs in one or multiple chromosomes using the `-C/--ctg_name` parameter
@@ -318,11 +322,13 @@ Then:
 
 ------
 
-## Tagging Germline Variant using Genetic Databases
-ClairS-TO utilizes genetic databases (Default: gnomAD, dbSNP, and 1000G PoN) to tag germline variants. 
-Users can choose any resource from preset databases or provide their own PoN resource(using `--use_own_pon_resource` option) to apply germline tagging.
+## Tagging non-somatic variant using public databases
 
-| Database  | Source |                                                   Visiting URL                                                   |       Visiting Time       | Original Sites |  Filtering Criteria  | Remaining Sites |    Remaining Columns    |
+ClairS-TO by default tags variants if they exist in gnomAD, dbSNP, or 1000G PoN and pass the filters listed in the table below. 
+
+Users can also use their own variants for tagging using the `--use_own_pon_resource` option.
+
+| Database name | Source | Visiting URL | Last visited | Total #Variants |  Filters  | #Variants used for tagging | Remaining Columns in the input |
 |:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:--------------------:|:---------------:|:-----------------------:|
 |  gnomAD   |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07  |  268,225,276   | Sites with AF ≥ 0.01 |   16,209,110    | #CHROM  POS ID  REF ALT |
 |   dbSNP   |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22  |   60,691,395   |  Non-Somatic sites   |   58,868,455    | #CHROM  POS ID  REF ALT |
