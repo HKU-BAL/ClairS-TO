@@ -33,8 +33,6 @@ import os
 import logging
 import shlex
 
-sys.path.insert(0, '/autofs/bal34/lchen/home/ClairST/ClairS-TO')
-
 from time import time
 from argparse import ArgumentParser, SUPPRESS
 from subprocess import run
