@@ -20,6 +20,8 @@ Below is a workflow of ClairS-TO.
 
 Like other tumor-only somatic variant callers, ClairS-TO accepts public databases (i.e., gnomAD, dbSNP, and 1000G PoN) and private PoN as input to remove non-somatic variants.
 
+For somatic variant calling using paired tumor/normal samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
+
 ------
 
 ## Contents
@@ -131,11 +133,11 @@ singularity exec \
   --conda_prefix /opt/conda/envs/clairs-to
 ```
 
-### Option 3. Build an anaconda (or micromamba) virtual environment
+### Option 3. Build a micromamba (or anaconda) virtual environment
 
 Check here to install the tools step by step.
 
-**Use Micromamba (Recommended)**:
+**Use micromamba (recommended)**:
 
 Please install micromamba using the official [guide](https://mamba.readthedocs.io/en/latest/micromamba-installation.html) or using the commands below:
 
@@ -149,7 +151,7 @@ source ~/.bashrc
 ```
 
 
-**Or use Anaconda**:
+**Or use anaconda**:
 
 Please install anaconda using the official [guide](https://docs.anaconda.com/anaconda/install) or using the commands below:
 
@@ -164,19 +166,18 @@ chmod +x ./Miniconda3-latest-Linux-x86_64.sh
 ```bash
 # create and activate an environment named clairs-to
 # install pypy and packages in the environment
-# for anaconda 
-conda create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina einops python=3.9.0 -y
-source activate clairs-to
-
-# or
 # for micromamba
-micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina einops python=3.9.0 -y
+micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina bcftools einops python=3.9.0 -y
 micromamba activate clairs-to
+
+## for anaconda 
+#conda create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina bcftools einops python=3.9.0 -y
+#source activate clairs-to
 
 git clone https://github.com/HKU-BAL/ClairS-TO.git
 cd ClairS-TO
 
-# make sure in conda environment
+# make sure in clairs-to environment
 # download pre-trained models
 echo ${CONDA_PREFIX}
 mkdir -p ${CONDA_PREFIX}/bin/clairs-to_models
@@ -191,7 +192,7 @@ tar -zxvf clairs-to_databases.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_databases/
 
 ### Option 4. Docker Dockerfile
 
-This is the same as option 1 except that you are building a docker image yourself. Please refer to option 1 for usage. 
+This is the same as Option 1 except that you are building a docker image yourself. Please refer to Option 1 for usage. 
 
 ```bash
 git clone https://github.com/HKU-BAL/ClairS-TO.git
@@ -256,14 +257,14 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Minimal SNV AF required for a variant to be called. Decrease SNV_MIN_AF might increase a bit of sensitivity, but in trade of precision, speed, and accuracy. Default: 0.05.
   --min_coverage MIN_COVERAGE
                         Minimal coverage required for a variant to be called. Default: 4.
-  --disable_germline_tagging
+  --disable_nonsomatic_tagging
                         Disable non-somatic variants tagging. Default: enable non-somatic variants tagging.
   --disable_gnomad_tagging
                         Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD.
+  --disable_dbsnp_tagging
+                        Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbSNP.
   --disable_pon_tagging
                         Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN.
-  --disable_dbsnp_tagging
-                        Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbsnp.
   --use_own_pon_resource OWN_PON_VCF_FN
                         Use own variants in VCF format for tagging.
   --chunk_size CHUNK_SIZE                           
@@ -276,9 +277,9 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Remove the intermediate directory before finishing to save disk space.
   --include_all_ctgs    Call variants on all contigs, otherwise call in chr{1..22} and {1..22}.
   --print_ref_calls     Show reference calls (0/0) in VCF file.
-  --disable_print_germline_calls
-                        Disable printing germline calls. Default: enable germline calls printing.
-  -d, --dry_run         Print the commands that will be ran.
+  --disable_print_nonsomatic_calls
+                        Disable printing non-somatic calls. Default: enable non-somatic calls printing.
+  -d, --dry_run         Print the commands that will be run.
   --python PYTHON       Absolute path of python, python3 >= 3.9 is required.
   --pypy PYPY           Absolute path of pypy3, pypy3 >= 3.6 is required.
   --samtools SAMTOOLS   Absolute path of samtools, samtools version >= 1.10 is required.
@@ -328,11 +329,11 @@ ClairS-TO by default tags variants if they exist in gnomAD, dbSNP, or 1000G PoN 
 
 Users can also use their own variants for tagging using the `--use_own_pon_resource` option.
 
-| Database name | Source | Visiting URL | Last visited | Total #Variants |  Filters  | #Variants used for tagging | Remaining Columns in the input |
-|:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:--------------------:|:---------------:|:-----------------------:|
-|  gnomAD   |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07  |  268,225,276   | Sites with AF ≥ 0.01 |   16,209,110    | #CHROM  POS ID  REF ALT |
-|   dbSNP   |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22  |   60,691,395   |  Non-Somatic sites   |   58,868,455    | #CHROM  POS ID  REF ALT |
-| 1000G PoN |  GATK  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32  |   2,609,566    |      All sites       |    2,609,566    | #CHROM  POS ID  REF ALT |
+| Database name | Source | Visiting URL | Last visited | Total #Variants |        Filters        | #Variants used for tagging | Remaining Columns in the input |
+|:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:---------------------:|:--------------------------:|:-----------------------:|
+|  gnomAD   |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07  |  268,225,276   | Sites with AF ≥ 0.001 |         35,551,905         | #CHROM  POS ID  REF ALT |
+|   dbSNP   |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22  |   60,691,395   |   Non-Somatic sites   |         60,683,019         | #CHROM  POS ID  REF ALT |
+| 1000G PoN |  GATK  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32  |   2,609,566    |       All sites       |         2,609,566          | #CHROM  POS ID  REF ALT |
 
 ------
 
