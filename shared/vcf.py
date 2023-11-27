@@ -16,13 +16,13 @@ vcf_header = dedent("""\
             ##source=ClairS-TO
             ##{}_version={}
             ##FILTER=<ID=PASS,Description="All filters passed">
-            ##FILTER=<ID=Germline,Description="Germline variant tagged by genetic databases">
+            ##FILTER=<ID=NonSomatic,Description="Non-somatic variant tagged by genetic databases">
             ##FILTER=<ID=LowQual,Description="Low-quality variant">
             ##FILTER=<ID=RefCall,Description="Reference call">
-            ##INFO=<ID=gnomAD,Number=R,Type=String,Description="Germline variant tagged by gnomAD resource">
-            ##INFO=<ID=dbSNP,Number=R,Type=String,Description="Germline variant tagged by dnSNP resource">
-            ##INFO=<ID=PoN,Number=R,Type=String,Description="Germline variant tagged by 1000G PoN resource">
-            ##INFO=<ID=OwnPoN,Number=R,Type=String,Description="Germline variant tagged by own PoN resource">
+            ##INFO=<ID=gnomAD,Number=R,Type=String,Description="Non-somatic variant tagged by gnomAD database resource">
+            ##INFO=<ID=dbSNP,Number=R,Type=String,Description="Non-somatic variant tagged by dnSNP database resource">
+            ##INFO=<ID=PoN,Number=R,Type=String,Description="Non-somatic variant tagged by 1000G PoN database resource">
+            ##INFO=<ID=OwnPoN,Number=R,Type=String,Description="Non-somatic variant tagged by own PoN database resource">
             ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
             ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
             ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth in the tumor BAM">

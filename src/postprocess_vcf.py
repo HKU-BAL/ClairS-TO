@@ -48,7 +48,7 @@ def compress_index_vcf(input_vcf):
                           stderr=subprocess.PIPE)
 
 def mark_low_qual(row, quality_score_for_pass):
-    if row == '' or "Germline" in row or "RefCall" in row:
+    if row == '' or "NonSomatic" in row or "RefCall" in row:
         return row
     columns = row.split('\t')
     qual = float(columns[5])
@@ -72,7 +72,6 @@ def merge_vcf(args):
     cmdline_file = args.cmdline
     prefer_recall = args.prefer_recall
 
-    # cmdline = None
     if cmdline_file is not None and os.path.exists(cmdline_file):
         cmdline = open(cmdline_file).read().rstrip()
 
@@ -139,7 +138,7 @@ def merge_vcf(args):
     for k, row in pileup_input_variant_dict.items():
         if k[0] not in contig_dict or k[1] not in contig_dict[k[0]]:
             columns = row.strip().split()
-            if columns[6] != "Germline" and columns[6] != "RefCall":
+            if columns[6] != "NonSomatic" and columns[6] != "RefCall":
                 if prefer_recall:
                     columns[5] = columns[5]
                     columns = update_GQ(columns)

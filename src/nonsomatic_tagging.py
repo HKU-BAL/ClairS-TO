@@ -1,14 +1,9 @@
 import os
 import shlex
-import gc
-import subprocess
-import concurrent.futures
 
-from collections import Counter
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
-import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
@@ -55,7 +50,6 @@ class VcfReader_Database(object):
                 continue
             position = int(position)
             row_str = row if self.keep_row_str else False
-            # key = (chromosome, position, reference, alternate) if self.ctg_name is None else (position, reference, alternate)
             key = (chromosome, position, id) if self.ctg_name is None else (position, id)
 
             self.variant_dict[key] = Position(ctg_name=chromosome,
@@ -66,13 +60,13 @@ class VcfReader_Database(object):
                                               )
 
 
-def germline_filter(args):
+def nonsomatic_filter(args):
 
     ctg_name = args.ctg_name
     disable_gnomad_tagging = args.disable_gnomad_tagging
     disable_dbsnp_tagging = args.disable_dbsnp_tagging
     disable_pon_tagging = args.disable_pon_tagging
-    disable_print_germline_calls = args.disable_print_germline_calls
+    disable_print_nonsomatic_calls = args.disable_print_nonsomatic_calls
     pileup_vcf_fn = args.pileup_vcf_fn
 
     gnomad_vcf_fn = args.gnomad_resource
@@ -110,7 +104,7 @@ def germline_filter(args):
                     input_variant_dict_id_set_contig[ctg_name].add(
                         (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-    germline_filter_variant_dict_id_set_contig = input_variant_dict_id_set_contig.copy()
+    nonsomatic_filter_variant_dict_id_set_contig = input_variant_dict_id_set_contig.copy()
 
     input_inter_gnomad_variant_dict_id_set_contig = defaultdict(set)
     input_inter_dbsnp_variant_dict_id_set_contig = defaultdict(set)
@@ -132,7 +126,6 @@ def germline_filter(args):
                                       keep_row_str=False,
                                       filter_tag=None,
                                       save_header=True)
-        # print("Processing gnomAD resource...")
         gnomad_vcf_reader.read_vcf()
         gnomad_input_variant_dict = gnomad_vcf_reader.variant_dict
 
@@ -147,8 +140,8 @@ def germline_filter(args):
                 gnomad_variant_dict_id_set_contig[ctg_name].add(
                     (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-        for k, v in germline_filter_variant_dict_id_set_contig.items():
-            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - \
+        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
                                                             gnomad_variant_dict_id_set_contig[k]
             input_inter_gnomad_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
                 gnomad_variant_dict_id_set_contig[k])
@@ -158,36 +151,7 @@ def germline_filter(args):
         for k, v in input_inter_gnomad_variant_dict_id_set_contig.items():
             total_filter_by_gnomad += len(input_inter_gnomad_variant_dict_id_set_contig[k])
 
-        print("[INFO] Processing in {}: filtered by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
-
-    # if not disable_gnomad_tagging and gnomad_vcf_fn is not None:
-    #     gnomad_vcf_reader = VcfReader_Database(vcf_fn=gnomad_vcf_fn,
-    #                                  ctg_name=ctg_name,
-    #                                  keep_row_str=False,
-    #                                  save_header=True)
-    #     gnomad_vcf_reader.read_vcf()
-    #     gnomad_input_variant_dict = gnomad_vcf_reader.variant_dict
-    #
-    #     gnomad_variant_dict_id_set_contig = defaultdict(set)
-    #     for k, v in gnomad_input_variant_dict.items():
-    #         if ctg_name is None:
-    #             if k[0] not in input_keys_list:
-    #                 continue
-    #             gnomad_variant_dict_id_set_contig[k[0]].add((str(k[1]) + '\t' + str(k[2]) + '\t' + str(k[3][0])))
-    #         else:
-    #             gnomad_variant_dict_id_set_contig[ctg_name].add(
-    #                 (str(k[0]) + '\t' + str(k[1]) + '\t' + str(k[2][0])))
-    #
-    #     for k, v in germline_filter_variant_dict_id_set_contig.items():
-    #         germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - gnomad_variant_dict_id_set_contig[k]
-    #         input_inter_gnomad_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(gnomad_variant_dict_id_set_contig[k])
-    #
-    #     total_filter_by_gnomad = 0
-    #
-    #     for k, v in input_inter_gnomad_variant_dict_id_set_contig.items():
-    #         total_filter_by_gnomad += len(input_inter_gnomad_variant_dict_id_set_contig[k])
-    #
-    #     print("[INFO] Processing in {}: filtered by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
+        print("[INFO] Processing in {}: tagged by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
 
     if not disable_dbsnp_tagging and dbsnp_vcf_fn is not None:
         dbsnp_vcf_reader = VcfReader_Database(vcf_fn=dbsnp_vcf_fn,
@@ -209,18 +173,8 @@ def germline_filter(args):
                 dbsnp_variant_dict_id_set_contig[ctg_name].add(
                     (str(k[0]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-        # for k, v in dbsnp_input_variant_dict.items():
-        #     if ctg_name is None:
-        #         if k[0] not in input_keys_list:
-        #             continue
-        #         dbsnp_variant_dict_id_set_contig[k[0]].add(
-        #             (str(k[1]) + '\t' + str(k[2]) + '\t' + str(k[3][0])))
-        #     else:
-        #         dbsnp_variant_dict_id_set_contig[ctg_name].add(
-        #             (str(k[0]) + '\t' + str(k[1]) + '\t' + str(k[2][0])))
-
-        for k, v in germline_filter_variant_dict_id_set_contig.items():
-            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - dbsnp_variant_dict_id_set_contig[k]
+        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - dbsnp_variant_dict_id_set_contig[k]
             input_inter_dbsnp_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(dbsnp_variant_dict_id_set_contig[k])
 
         total_filter_by_dbsnp = 0
@@ -228,7 +182,7 @@ def germline_filter(args):
         for k, v in input_inter_dbsnp_variant_dict_id_set_contig.items():
             total_filter_by_dbsnp += len(input_inter_dbsnp_variant_dict_id_set_contig[k])
 
-        print("[INFO] Processing in {}: filtered by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
+        print("[INFO] Processing in {}: tagged by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
 
     if not disable_pon_tagging and pon_vcf_fn is not None:
         pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
@@ -236,7 +190,6 @@ def germline_filter(args):
                                    keep_row_str=False,
                                    filter_tag=None,
                                    save_header=True)
-        # print("Processing 1000G PoN resource...")
         pon_vcf_reader.read_vcf()
         pon_input_variant_dict = pon_vcf_reader.variant_dict
 
@@ -250,8 +203,8 @@ def germline_filter(args):
                 pon_variant_dict_id_set_contig[ctg_name].add(
                     (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-        for k, v in germline_filter_variant_dict_id_set_contig.items():
-            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - \
+        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
                                                             pon_variant_dict_id_set_contig[k]
             input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
                 pon_variant_dict_id_set_contig[k])
@@ -261,7 +214,7 @@ def germline_filter(args):
         for k, v in input_inter_pon_variant_dict_id_set_contig.items():
             total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
 
-        print("[INFO] Processing in {}: filtered by 1000G PoN resource: {}".format(ctg_name, total_filter_by_pon))
+        print("[INFO] Processing in {}: tagged by 1000G PoN resource: {}".format(ctg_name, total_filter_by_pon))
 
     if self_vcf_fn is not None:
         self_vcf_reader = VcfReader(vcf_fn=self_vcf_fn,
@@ -269,7 +222,6 @@ def germline_filter(args):
                                     keep_row_str=False,
                                     filter_tag=None,
                                     save_header=True)
-        # print("Processing own PoN resource...")
         self_vcf_reader.read_vcf()
         self_input_variant_dict = self_vcf_reader.variant_dict
 
@@ -283,8 +235,8 @@ def germline_filter(args):
                 self_variant_dict_id_set_contig[ctg_name].add(
                     (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-        for k, v in germline_filter_variant_dict_id_set_contig.items():
-            germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - \
+        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
                                                             self_variant_dict_id_set_contig[k]
             input_inter_self_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
                 self_variant_dict_id_set_contig[k])
@@ -294,74 +246,12 @@ def germline_filter(args):
         for k, v in input_inter_self_variant_dict_id_set_contig.items():
             total_filter_by_self += len(input_inter_self_variant_dict_id_set_contig[k])
 
-        print("[INFO] Processing in  {}: filtered by own PoN resource: {}".format(ctg_name, total_filter_by_self))
-
-    # if not disable_pon_tagging and pon_vcf_fn is not None:
-    #     pon_vcf_reader = VcfReader_Database(vcf_fn=pon_vcf_fn,
-    #                                   ctg_name=ctg_name,
-    #                                   keep_row_str=False,
-    #                                   save_header=True)
-    #     pon_vcf_reader.read_vcf()
-    #     pon_input_variant_dict = pon_vcf_reader.variant_dict
-    #
-    #     pon_variant_dict_id_set_contig = defaultdict(set)
-    #
-    #     for k, v in pon_input_variant_dict.items():
-    #         if ctg_name is None:
-    #             if k[0] not in input_keys_list:
-    #                 continue
-    #             pon_variant_dict_id_set_contig[k[0]].add(
-    #                 (str(k[1]) + '\t' + str(k[2]) + '\t' + str(k[3][0])))
-    #         else:
-    #             pon_variant_dict_id_set_contig[ctg_name].add(
-    #                 (str(k[0]) + '\t' + str(k[1]) + '\t' + str(k[2][0])))
-    #
-    #     for k, v in germline_filter_variant_dict_id_set_contig.items():
-    #         germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - pon_variant_dict_id_set_contig[k]
-    #         input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(pon_variant_dict_id_set_contig[k])
-    #
-    #     total_filter_by_pon = 0
-    #
-    #     for k, v in input_inter_pon_variant_dict_id_set_contig.items():
-    #         total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
-    #
-    #     print("[INFO] Processing in {}: filtered by 1000G PoN resource: {}".format(ctg_name, total_filter_by_pon))
-    #
-    # if self_vcf_fn is not None:
-    #     self_vcf_reader = VcfReader_Database(vcf_fn=self_vcf_fn,
-    #                                  ctg_name=ctg_name,
-    #                                  keep_row_str=False,
-    #                                  save_header=True)
-    #     self_vcf_reader.read_vcf()
-    #     self_input_variant_dict = self_vcf_reader.variant_dict
-    #
-    #     self_variant_dict_id_set_contig = defaultdict(set)
-    #
-    #     for k, v in self_input_variant_dict.items():
-    #         if ctg_name is None:
-    #             if k[0] not in input_keys_list:
-    #                 continue
-    #             self_variant_dict_id_set_contig[k[0]].add(
-    #                 (str(k[1]) + '\t' + str(k[2]) + '\t' + str(k[3][0])))
-    #         else:
-    #             self_variant_dict_id_set_contig[ctg_name].add(
-    #                 (str(k[0]) + '\t' + str(k[1]) + '\t' + str(k[2][0])))
-    #
-    #     for k, v in germline_filter_variant_dict_id_set_contig.items():
-    #         germline_filter_variant_dict_id_set_contig[k] = germline_filter_variant_dict_id_set_contig[k] - self_variant_dict_id_set_contig[k]
-    #         input_inter_self_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(self_variant_dict_id_set_contig[k])
-    #
-    #     total_filter_by_self = 0
-    #
-    #     for k, v in input_inter_self_variant_dict_id_set_contig.items():
-    #         total_filter_by_self += len(input_inter_self_variant_dict_id_set_contig[k])
-    #
-    #     print("[INFO] Processing in  {}: filtered by own PoN resource: {}".format(ctg_name, total_filter_by_self))
+        print("[INFO] Processing in  {}: tagged by own PoN resource: {}".format(ctg_name, total_filter_by_self))
 
     input_inter_all_variant_dict_id_set_contig = defaultdict(set)
 
-    for k, v in germline_filter_variant_dict_id_set_contig.items():
-        input_inter_all_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k] - germline_filter_variant_dict_id_set_contig[k]
+    for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+        input_inter_all_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k] - nonsomatic_filter_variant_dict_id_set_contig[k]
 
     total_filter_by_all = 0
 
@@ -370,10 +260,10 @@ def germline_filter(args):
 
     total_remain_passes = 0
 
-    for k, v in germline_filter_variant_dict_id_set_contig.items():
-        total_remain_passes += len(germline_filter_variant_dict_id_set_contig[k])
+    for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+        total_remain_passes += len(nonsomatic_filter_variant_dict_id_set_contig[k])
 
-    print("[INFO] Processing in {}: filtered by all database resources: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
+    print("[INFO] Processing in {}: tagged by all database resources: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
 
     contigs_order = major_contigs_order + input_keys_list
     contigs_order_list = sorted(input_keys_list, key=lambda x: contigs_order.index(x))
@@ -386,10 +276,10 @@ def germline_filter(args):
                 pos = int(pos_info.split('\t')[0])
                 key = (contig, pos) if ctg_name is None else pos
                 ori_row_str = pileup_variant_dict[key].row_str
-                if not disable_print_germline_calls:
+                if not disable_print_nonsomatic_calls:
                     columns = ori_row_str.split('\t')
                     if pos_info in input_inter_all_variant_dict_id_set_contig[contig]:
-                        columns[6] = "Germline"
+                        columns[6] = "NonSomatic"
                         columns[7] = ""
                         if pos_info in input_inter_gnomad_variant_dict_id_set_contig[contig]:
                             columns[7] += "gnomAD"
@@ -408,14 +298,14 @@ def germline_filter(args):
                     row_str = '\t'.join(columns)
                     output.write(row_str)
                 else:
-                    if pos_info in germline_filter_variant_dict_id_set_contig[contig]:
+                    if pos_info in nonsomatic_filter_variant_dict_id_set_contig[contig]:
                         output.write(ori_row_str)
 
     output.close()
 
 
 def main():
-    parser = ArgumentParser(description="Germline tagging for long-read data")
+    parser = ArgumentParser(description="Non-somatic tagging for long-read data")
 
     parser.add_argument('--ctg_name', type=str, default=None,
                         help="The name of sequence to be processed")
@@ -424,16 +314,16 @@ def main():
                         help="Pileup VCF input")
 
     parser.add_argument('--gnomad_resource', type=str, default=None,
-                        help="Use gnomAD dataset resource to tag germline variant")
+                        help="Use gnomAD database resource to tag non-somatic variant")
 
     parser.add_argument('--dbsnp_resource', type=str, default=None,
-                        help="Use dbSNP dataset resource to tag germline variant")
+                        help="Use dbSNP database resource to tag non-somatic variant")
 
     parser.add_argument('--pon_resource', type=str, default=None,
-                        help="Use 1000G PoN dataset resource to tag germline variant")
+                        help="Use 1000G PoN database resource to tag non-somatic variant")
 
     parser.add_argument('--use_own_pon_resource', type=str, default=None,
-                        help="Use user own PoN dataset resource to tag germline variant")
+                        help="Use own variants in VCF format for tagging")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")
@@ -460,39 +350,33 @@ def main():
                         help="Absolute path to the 'samtools', samtools version >= 1.10 is required. Default: %(default)s")
 
     parser.add_argument(
-        "--disable_germline_tagging",
-        action='store_true',
-        help="Disable germline tagging to tag germline calls. Default: enable germline tagging."
-    )
-
-    parser.add_argument(
         "--disable_gnomad_tagging",
         action='store_true',
-        help="Disable gnomAD database resource to tag germline calls. Default: enable gnomAD tagging."
-    )
-
-    parser.add_argument(
-        "--disable_pon_tagging",
-        action='store_true',
-        help="Disable 1000G PoN database resource to tag germline calls. Default: enable 1000G PoN tagging."
+        help="Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD."
     )
 
     parser.add_argument(
         "--disable_dbsnp_tagging",
         action='store_true',
-        help="Disable dbSNP database resource to tag germline calls. Default: enable dbSNP tagging."
+        help="Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbSNP."
     )
 
     parser.add_argument(
-        "--disable_print_germline_calls",
+        "--disable_pon_tagging",
         action='store_true',
-        help="Disable print germline calls. Default: enable germline calls printing."
+        help="Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN."
+    )
+
+    parser.add_argument(
+        "--disable_print_nonsomatic_calls",
+        action='store_true',
+        help="Disable print non-somatic calls. Default: enable non-somatic calls printing."
     )
 
     global args
     args = parser.parse_args()
 
-    germline_filter(args)
+    nonsomatic_filter(args)
 
 
 if __name__ == "__main__":

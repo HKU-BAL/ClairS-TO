@@ -47,7 +47,7 @@ data_preprocess_folder = [
     "postprocess_vcf",
     'concat_files',
     'add_back_missing_variants_in_genotyping',
-    "germline_filtering",
+    "nonsomatic_tagging",
     'realign_reads',
     'realign_variants',
     "haplotype_filtering",

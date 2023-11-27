@@ -79,10 +79,10 @@ docker run -it \
 
 |  Type   | Precision | Recall | F1-score | TP | FP | FN |
 | :-----: |:---------:|:------:|:--------:|:--:|:--:|:--:|
-| **SNV** |  0.9333   | 0.9655 |  0.9492  | 28 | 2  | 1  |
+| **SNV** |  0.9655   | 0.9655 |  0.9655  | 28 | 1  | 1  |
 
 
- **Or run [som.py]() for benchmarking (optional)**
+ **Or run [som.py](https://github.com/Illumina/hap.py/#sompy) for benchmarking (optional)**
 
 ```bash
 # Need to restrict target BED regions for benchmarking

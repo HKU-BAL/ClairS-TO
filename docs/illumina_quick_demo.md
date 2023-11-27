@@ -83,7 +83,7 @@ docker run -it \
 | **SNV** |  0.9667   |  1.0   |  0.9831  | 29 | 1  | 0  |
 
 
-**Or run [som.py]() for benchmarking (optional)**
+**Or run [som.py](https://github.com/Illumina/hap.py/#sompy) for benchmarking (optional)**
 
 ```bash
 # Need to restrict target BED regions for benchmarking
