@@ -29,7 +29,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 - [Installation](#installation)
   - [Option 1. Docker pre-built image](#option-1--docker-pre-built-image)
   - [Option 2. Singularity](#option-2-singularity)
-  - [Option 3. Build an anaconda (or micromamba) virtual environment](#option-3-build-an-anaconda-or-micromamba-virtual-environment)
+  - [Option 3. Build a micromamba (or anaconda) virtual environment](#option-3-build-a-micromamba-or-anaconda-virtual-environment)
   - [Option 4. Docker Dockerfile](#option-4-docker-dockerfile)
 - [Quick Demo](#quick-demo)
 - [Pre-trained Models](#pre-trained-models)
