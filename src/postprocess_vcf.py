@@ -62,7 +62,7 @@ def update_GQ(columns):
     INFO = columns[8]
     FORMAT = columns[9].split(':')
     gq_index = INFO.split(':').index("GQ")
-    FORMAT[gq_index] = str(int(float(columns[5]))) if float(columns[5]) > 0.0 else FORMAT[gq_index]
+    FORMAT[gq_index] = str(int(float(columns[5]))) if float(columns[5]) > 0.0 else str(int(FORMAT[gq_index]))
     columns[9] = ':'.join(FORMAT)
     return columns
 
@@ -75,7 +75,7 @@ def merge_vcf(args):
     if cmdline_file is not None and os.path.exists(cmdline_file):
         cmdline = open(cmdline_file).read().rstrip()
 
-    max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls if args.max_qual_filter_pileup_calls is not None else param.min_thred_qual[platform]
+    max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls
     quality_score_for_pass = args.qual if args.qual is not None else param.min_thred_qual[platform]
     af_cut_off = args.af if args.af is not None else param.af_dict[platform]
 
