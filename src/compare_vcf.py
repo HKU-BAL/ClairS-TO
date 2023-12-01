@@ -47,6 +47,13 @@ major_contigs = {"chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]}.union(
     {str(a) for a in list(range(1, 23)) + ["X", "Y"]})
 
 
+def sort_key(item):
+    order_map = {value: index for index, value in enumerate(major_contigs_order)}
+    chr = order_map[item[0]]
+    pos = item[1]
+    return (chr, pos)
+
+
 def cal_metrics(tp, fp, fn):
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -513,7 +520,8 @@ def compare_vcf(args):
         for vcf_type, variant_set in zip(candidate_types, variant_sets):
             vcf_fn = os.path.join(output_dir, '{}.vcf'.format(vcf_type))
             vcf_writer = VcfWriter(vcf_fn=vcf_fn, ctg_name=args.ctg_name, write_header=False)
-            for key in variant_set:
+            variant_list = sorted(variant_set, key=sort_key) if args.ctg_name is None else sorted(variant_set)
+            for key in variant_list:
                 if key in input_variant_dict:
                     vcf_infos = input_variant_dict[key]
                 elif key in truth_variant_dict:
