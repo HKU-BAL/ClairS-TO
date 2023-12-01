@@ -869,7 +869,7 @@ def somatic_calling(args):
         hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER.log'
         commands_list += [hap_g_command]
 
-    # STEP 8: SORT FINAL VCF
+    # STEP 8: VCF POST-PROCESSING
     echo_list.append("[INFO] STEP 5: VCF Post-processing")
     sort_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
     sort_vcf_command += ' --ref_fn ' + args.ref_fn
