@@ -302,7 +302,6 @@ class VcfReader(object):
             extra_infos = columns[-1].split(':')[-1] if have_extra_infos else ''
             row_str = row if self.keep_row_str else False
             key = (chromosome, position) if self.ctg_name is None else position
-            # key = (chromosome, position)
 
             self.variant_dict[key] = Position(ctg_name=chromosome,
                                               pos=position,
