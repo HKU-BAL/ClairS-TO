@@ -28,8 +28,8 @@ max_tumor_depth = 84
 ont_tensor_max_depth = 128
 ont_max_depth = ont_tensor_max_depth + center_padding_depth
 min_bq_dict = {'ont': ont_min_bq, 'ilmn': min_bq, 'hifi': ont_min_bq}
-min_thred_qual = {'ont': 8, 'ont_r10': 8, 'ont_r9': 8, 'ilmn': 2, 'hifi': 2, 'hifi_sequel2': 2, 'hifi_revio': 2}
-best_thred_qual = {'ont': 16, 'ont_r10': 16, 'ont_r9': 16, 'ilmn': 4, 'hifi': 4, 'hifi_sequel2': 4, 'hifi_revio': 4}
+min_thred_qual = {'ont': 8, 'ont_r10': 8, 'ont_r9': 8, 'ilmn': 2, 'hifi': 4, 'hifi_sequel2': 4, 'hifi_revio': 4}
+best_thred_qual = {'ont': 15, 'ont_r10': 15, 'ont_r9': 15, 'ilmn': 4, 'hifi': 8, 'hifi_sequel2': 8, 'hifi_revio': 8}
 ont_max_tumor_depth = 75
 
 matrix_depth_dict = {'ont': ont_max_depth, 'ilmn': max_depth, 'hifi': 130}
