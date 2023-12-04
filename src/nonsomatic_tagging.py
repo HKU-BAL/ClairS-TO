@@ -60,7 +60,7 @@ class VcfReader_Database(object):
                                               )
 
 
-def nonsomatic_filter(args):
+def nonsomatic_tag(args):
 
     ctg_name = args.ctg_name
     disable_gnomad_tagging = args.disable_gnomad_tagging
@@ -376,7 +376,7 @@ def main():
     global args
     args = parser.parse_args()
 
-    nonsomatic_filter(args)
+    nonsomatic_tag(args)
 
 
 if __name__ == "__main__":
