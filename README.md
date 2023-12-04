@@ -1,4 +1,4 @@
-# ClairS-TO - a deep-learning method for tumor-only somatic small variant calling
+# ClairS-TO - a deep-learning method for tumor-only somatic SNV calling
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
@@ -9,7 +9,7 @@ Email: {rbluo,zxzheng,lchen}@cs.hku.hk
 
 ## Introduction
 
-ClairS-TO (Somatic Tumor-Only) is a tool in the Clair series to support long-read somatic small variant calling with only tumor samples available.
+ClairS-TO (Somatic Tumor-Only) is a tool in the Clair series to support long-read somatic single nucleotide variation (SNV) calling with only tumor samples available.
 
 Without a normal sample, non-somatic noises cannot be identified by finding common signals between a paired tumor and normal. The variant caller itself needs to be more proficient in telling noises from somatic signals.
 
