@@ -41,7 +41,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Latest Updates
 
-*v0.0.1 (Dec., 2023)*: Initial release for early access.
+*v0.0.1 (Dec. 5, 2023)*: Initial release for early access.
 
 ---
 
