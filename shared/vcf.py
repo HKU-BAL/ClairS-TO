@@ -19,19 +19,19 @@ vcf_header = dedent("""\
             ##FILTER=<ID=NonSomatic,Description="Non-somatic variant tagged by genetic databases">
             ##FILTER=<ID=LowQual,Description="Low-quality variant">
             ##FILTER=<ID=RefCall,Description="Reference call">
-            ##INFO=<ID=gnomAD,Number=R,Type=String,Description="Non-somatic variant tagged by gnomAD database resource">
-            ##INFO=<ID=dbSNP,Number=R,Type=String,Description="Non-somatic variant tagged by dnSNP database resource">
-            ##INFO=<ID=PoN,Number=R,Type=String,Description="Non-somatic variant tagged by 1000G PoN database resource">
-            ##INFO=<ID=OwnPoN,Number=R,Type=String,Description="Non-somatic variant tagged by own PoN database resource">
+            ##INFO=<ID=gnomAD,Number=0,Type=Flag,Description="Non-somatic variant tagged by gnomAD database resource">
+            ##INFO=<ID=dbSNP,Number=0,Type=Flag,Description="Non-somatic variant tagged by dnSNP database resource">
+            ##INFO=<ID=1kGPoN,Number=0,Type=Flag,Description="Non-somatic variant tagged by 1000G PoN">
+            ##INFO=<ID=OwnPoN,Number=0,Type=Flag,Description="Non-somatic variant tagged by own PoN">
             ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
             ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
-            ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth in the tumor BAM">
-            ##FORMAT=<ID=AF,Number=1,Type=Float,Description="Estimated allele frequency in the tumor BAM">
-            ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed in the tumor BAM">
-            ##FORMAT=<ID=AU,Number=1,Type=Integer,Description="Count of A in the tumor BAM">
-            ##FORMAT=<ID=CU,Number=1,Type=Integer,Description="Count of C in the tumor BAM">
-            ##FORMAT=<ID=GU,Number=1,Type=Integer,Description="Count of G in the tumor BAM">
-            ##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T in the tumor BAM">
+            ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+            ##FORMAT=<ID=AF,Number=1,Type=Float,Description="Estimated allele frequency">
+            ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed in the ALT column">
+            ##FORMAT=<ID=AU,Number=1,Type=Integer,Description="Count of A">
+            ##FORMAT=<ID=CU,Number=1,Type=Integer,Description="Count of C">
+            ##FORMAT=<ID=GU,Number=1,Type=Integer,Description="Count of G">
+            ##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">
             """.format(caller_name, version)
                     )
 
