@@ -65,7 +65,7 @@ def nonsomatic_tag(args):
     ctg_name = args.ctg_name
     disable_gnomad_tagging = args.disable_gnomad_tagging
     disable_dbsnp_tagging = args.disable_dbsnp_tagging
-    disable_pon_tagging = args.disable_pon_tagging
+    disable_1kgpon_tagging = args.disable_1kgpon_tagging
     disable_print_nonsomatic_calls = args.disable_print_nonsomatic_calls
     pileup_vcf_fn = args.pileup_vcf_fn
 
@@ -184,7 +184,7 @@ def nonsomatic_tag(args):
 
         print("[INFO] Processing in {}: tagged by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
 
-    if not disable_pon_tagging and pon_vcf_fn is not None:
+    if not disable_1kgpon_tagging and pon_vcf_fn is not None:
         pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
                                    ctg_name=ctg_name,
                                    keep_row_str=False,
@@ -290,7 +290,7 @@ def nonsomatic_tag(args):
                         if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
                                 columns[7] += ";"
-                            columns[7] += "PoN"
+                            columns[7] += "1kGPoN"
                         if pos_info in input_inter_self_variant_dict_id_set_contig[contig]:
                             if columns[7] != "":
                                 columns[7] += ";"
@@ -320,7 +320,7 @@ def main():
                         help="Use dbSNP database resource to tag non-somatic variant")
 
     parser.add_argument('--pon_resource', type=str, default=None,
-                        help="Use 1000G PoN database resource to tag non-somatic variant")
+                        help="Use 1000G PoN resource to tag non-somatic variant")
 
     parser.add_argument('--use_own_pon_resource', type=str, default=None,
                         help="Use own variants in VCF format for tagging")
@@ -362,9 +362,9 @@ def main():
     )
 
     parser.add_argument(
-        "--disable_pon_tagging",
+        "--disable_1kgpon_tagging",
         action='store_true',
-        help="Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN."
+        help="Disable using 1000G PoN for non-somatic variants tagging. Default: enable using 1000G PoN."
     )
 
     parser.add_argument(
