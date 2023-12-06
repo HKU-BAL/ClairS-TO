@@ -597,7 +597,7 @@ def print_args(args):
     logging("[INFO] DISABLE APPLY NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
     logging("[INFO] DISABLE APPLY GNOMAD TAGGING: {}".format(args.disable_gnomad_tagging))
     logging("[INFO] DISABLE APPLY DBSNP TAGGING: {}".format(args.disable_dbsnp_tagging))
-    logging("[INFO] DISABLE APPLY 1000G PON TAGGING: {}".format(args.disable_pon_tagging))
+    logging("[INFO] DISABLE APPLY 1000G PON TAGGING: {}".format(args.disable_1kgpon_tagging))
     logging("[INFO] USE OWN PON RESOURCE: {}".format(args.use_own_pon_resource is not None))
     logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS WITH DATABASES: {}".format(args.disable_print_nonsomatic_calls))
     logging("")
@@ -653,7 +653,7 @@ def print_command_line(args):
         cmdline += '--disable_nonsomatic_tagging ' if args.disable_nonsomatic_tagging else ""
         cmdline += '--disable_gnomad_tagging ' if args.disable_gnomad_tagging else ""
         cmdline += '--disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ""
-        cmdline += '--disable_pon_tagging ' if args.disable_pon_tagging else ""
+        cmdline += '--disable_1kgpon_tagging ' if args.disable_1kgpon_tagging else ""
         cmdline += '--gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ""
         cmdline += '--dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ""
         cmdline += '--pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ""
@@ -809,7 +809,7 @@ def somatic_calling(args):
         gf_command += ' --show_ref ' if args.print_ref_calls else ''
         gf_command += ' --disable_gnomad_tagging ' if args.disable_gnomad_tagging else ''
         gf_command += ' --disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ''
-        gf_command += ' --disable_pon_tagging ' if args.disable_pon_tagging else ''
+        gf_command += ' --disable_1kgpon_tagging ' if args.disable_1kgpon_tagging else ''
         gf_command += ' --gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ''
         gf_command += ' --dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ''
         gf_command += ' --pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ''
@@ -1082,9 +1082,9 @@ def somatic_parser():
     )
 
     optional_params.add_argument(
-        "--disable_pon_tagging",
+        "--disable_1kgpon_tagging",
         action='store_true',
-        help="Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN."
+        help="Disable using 1000G PoN for non-somatic variants tagging. Default: enable using 1000G PoN."
     )
 
     optional_params.add_argument(
