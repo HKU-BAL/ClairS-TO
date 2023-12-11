@@ -56,7 +56,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 After following [installation](#installation), you can run ClairS-TO with one command:
 
 ```bash
-./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_4khz
 
 ## Final output file: output/output.vcf.gz
 ```
@@ -70,12 +70,13 @@ Check [Usage](#Usage) for more options.
 ClairS-TO trained both Affirmative and Negational models using GIAB samples, and carry on benchmarking on HCC1395 tumor sample dataset. All models were trained with chr20 excluded (including only chr1-19, 21, 22). 
 
 |  Platform   |        Model name         |      Chemistry /Instruments      | Basecaller | Option (`-p/--platform`) |   Reference   | Aligner  |
-| :---------: |:-------------------------:|:--------------------------------:|:----------:| :-----------: | :------: | ----------- |
-| ONT | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           |   Dorado   | `ont_r10_dorado_5khz` | GRCh38_no_alt | Minimap2 |
-| ONT | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           |   Dorado   | `ont_r10_dorado_4khz` | GRCh38_no_alt | Minimap2 |
-| ONT | r1041_e82_400bps_sup_g615 |              R10.4.1, 4khz             |   Guppy6   |   `ont_r10_guppy` | GRCh38_no_alt | Minimap2 |
+| :---------: |:-------------------------:|:--------------------------------:|:----------:|:------------------------:| :------: | ----------- |
+| ONT | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           |   Dorado   |  `ont_r10_dorado_5khz`   | GRCh38_no_alt | Minimap2 |
+| ONT | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           |   Dorado   |  `ont_r10_dorado_4khz`   | GRCh38_no_alt | Minimap2 |
+| ONT | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           |   Guppy6   |   `ont_r10_guppy_4khz`   | GRCh38_no_alt | Minimap2 |
+| ONT |    ont_r10_guppy_5khz     |          R10.4.1, 5khz           |   Guppy6   |   `ont_r10_guppy_5khz`   | GRCh38_no_alt | Minimap2 |
 |  Illumina   |           ilmn            |          NovaSeq/HiseqX          |     -      |          `ilmn`          |    GRCh38     | BWA-MEM  |
-| PacBio HiFi |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | `hifi_revio` | GRCh38_no_alt | Minimap2 |
+| PacBio HiFi |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      |       `hifi_revio`       | GRCh38_no_alt | Minimap2 |
 
 ------
 
@@ -97,7 +98,7 @@ docker run -it \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
-  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR}                   ## output path prefix 
 ```
 
@@ -128,7 +129,7 @@ singularity exec \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
-  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR} \                 ## output path prefix
   --conda_prefix /opt/conda/envs/clairs-to
 ```
@@ -149,7 +150,6 @@ cd micromamba
 ./bin/micromamba shell init -s bash -p .
 source ~/.bashrc
 ```
-
 
 **Or use anaconda**:
 
@@ -217,7 +217,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \    ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \             ## use your reference file name here
   --threads ${THREADS} \                     ## maximum threads to be used
-  --platform ${PLATFORM} \                   ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                   ## options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR}                 ## output path prefix
  
 ## Final output file: ${OUTPUT_DIR}/output.vcf.gz
@@ -232,7 +232,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   -R, --ref_fn FASTA                Reference file input. The input file must be samtools indexed.
   -o, --output_dir OUTPUT_DIR       VCF output directory.
   -t, --threads THREADS             Max threads to be used.
-  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}.
+  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}.
 ```
 
 **Miscellaneous parameters:**
@@ -263,8 +263,8 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD.
   --disable_dbsnp_tagging
                         Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbSNP.
-  --disable_pon_tagging
-                        Disable using 1000G PoN database for non-somatic variants tagging. Default: enable using 1000G PoN.
+  --disable_1kgpon_tagging
+                        Disable using 1000G PoN for non-somatic variants tagging. Default: enable using 1000G PoN.
   --use_own_pon_resource OWN_PON_VCF_FN
                         Use own variants in VCF format for tagging.
   --chunk_size CHUNK_SIZE                           
@@ -290,19 +290,19 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
 #### Call SNVs in one or multiple chromosomes using the `-C/--ctg_name` parameter
 
 ```bash
-./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -C chr21,chr22
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_4khz -C chr21,chr22
 ```
 
 #### Call SNVs in one specific region using the `-r/--region` parameter
 
 ```bash
-./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -r chr20:1000000-2000000
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_4khz -r chr20:1000000-2000000
 ```
 
 #### Call SNVs at interested variant sites (genotyping) using the `-G/--genotyping_mode_vcf_fn` parameter
 
 ```bash
-./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -G input.vcf
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_4khz -G input.vcf
 ```
 
 #### Call SNVs in the BED regions using the `-B/--bed_fn` parameter
@@ -318,7 +318,7 @@ echo -e "${CTG2}\t${START_POS_2}\t${END_POS_2}" >> input.bed
 Then:
 
 ```bash
-./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy -B input.bed
+./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_4khz -B input.bed
 ```
 
 ------
