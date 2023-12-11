@@ -9,7 +9,7 @@ zstd = 'gzip'
 model_name_platform_dict = {
     'r1041_e82_400bps_sup_v420': 'ont_r10_dorado_5khz',
     'r1041_e82_400bps_sup_v410': 'ont_r10_dorado_4khz',
-    'r1041_e82_400bps_sup_g615': 'ont_r10_guppy'
+    'r1041_e82_400bps_sup_g615': 'ont_r10_guppy_4khz'
 }
 
 min_mq = ont_min_bq = 20
