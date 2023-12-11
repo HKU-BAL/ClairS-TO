@@ -486,24 +486,33 @@ def check_args(args):
         sys.exit(log_error("[ERROR] Tumor BAM index file {} or {} not found. Please run `samtools index $BAM` first.".format(args.tumor_bam_fn + '.bai',
                                                                                       args.tumor_bam_fn + '.crai')))
 
-    if args.enable_indel_calling and args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'hifi_revio'}:
+    if args.enable_indel_calling and args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'hifi_revio'}:
         sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10' and 'hifi_revio' platform"))
 
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
     if args.pileup_affirmative_model_path is None:
-        args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmative.pkl')
+        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'pileup_affirmative.pkl')
+        else:
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmative.pkl')
 
     if args.pileup_negational_model_path is None:
-        args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
+        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'pileup_negational.pkl')
+        else:
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
 
     args.pileup_affirmative_model_path = file_path_from(file_name=args.pileup_affirmative_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
 
-    args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True,is_directory=False, allow_none=False)
+    args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
 
     if args.likelihood_matrix_data is None:
-        args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
+        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'likelihood_matrix.txt')
+        else:
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
 
     if args.gnomad_resource is None:
         args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad_af_0.001_resource.vcf.gz')
@@ -530,8 +539,8 @@ def check_args(args):
     if args.chunk_size is None:
         args.chunk_size = 5000000
 
-    if args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ilmn', 'hifi_revio'}:
-        logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}'))
+    if args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'hifi_revio'}:
+        logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}'))
 
     if args.qual is None:
         if args.prefer_balance:
@@ -972,7 +981,7 @@ def somatic_parser():
         required=True,
         type=str,
         default=None,
-        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy, ilmn, hifi_revio}."
+        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}."
     )
 
     optional_params = parser.add_argument_group('Optional parameters')
