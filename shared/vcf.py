@@ -19,10 +19,18 @@ vcf_header = dedent("""\
             ##FILTER=<ID=NonSomatic,Description="Non-somatic variant tagged by genetic databases">
             ##FILTER=<ID=LowQual,Description="Low-quality variant">
             ##FILTER=<ID=RefCall,Description="Reference call">
-            ##INFO=<ID=gnomAD,Number=0,Type=Flag,Description="Non-somatic variant tagged by gnomAD database resource">
-            ##INFO=<ID=dbSNP,Number=0,Type=Flag,Description="Non-somatic variant tagged by dnSNP database resource">
-            ##INFO=<ID=1kGPoN,Number=0,Type=Flag,Description="Non-somatic variant tagged by 1000G PoN">
-            ##INFO=<ID=OwnPoN,Number=0,Type=Flag,Description="Non-somatic variant tagged by own PoN">
+            ##INFO=<ID=gnomAD,Number=0,Type=Flag,Description="url=http://www.bio8.cs.hku.hk/clairs-to/databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz,md5=601746b83d7a5e9a6433e3d199a725d5,non-somatic variant tagged by gnomAD database resource">
+            ##INFO=<ID=dbSNP,Number=0,Type=Flag,Description="url=http://www.bio8.cs.hku.hk/clairs-to/databases/dbsnp.b138.non-somatic.sites.vcf.gz,md5=310a02da7ca6691e6ca460a1d09e8351,non-somatic variant tagged by dnSNP database resource">
+            ##INFO=<ID=1kGPoN,Number=0,Type=Flag,Description="url=http://www.bio8.cs.hku.hk/clairs-to/databases/1000g-pon.sites.vcf.gz,md5=4a89bb0d8b2d4013dbd3a08d01843a9f,non-somatic variant tagged by 1000G PoN">
+            ##INFO=<ID=ownPoN,Number=0,Type=Flag,Description="Non-somatic variant tagged by own PoN">
+            ##INFO=<ID=FAU,Number=1,Type=Integer,Description="Count of A in forward strand">
+            ##INFO=<ID=FCU,Number=1,Type=Integer,Description="Count of C in forward strand">
+            ##INFO=<ID=FGU,Number=1,Type=Integer,Description="Count of G in forward strand">
+            ##INFO=<ID=FTU,Number=1,Type=Integer,Description="Count of T in forward strand">
+            ##INFO=<ID=RAU,Number=1,Type=Integer,Description="Count of A in reverse strand">
+            ##INFO=<ID=RCU,Number=1,Type=Integer,Description="Count of C in reverse strand">
+            ##INFO=<ID=RGU,Number=1,Type=Integer,Description="Count of G in reverse strand">
+            ##INFO=<ID=RTU,Number=1,Type=Integer,Description="Count of T in reverse strand">
             ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
             ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
             ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
