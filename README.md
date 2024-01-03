@@ -74,7 +74,7 @@ ClairS-TO trained both Affirmative and Negational models using GIAB samples, and
 | ONT | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           |   Dorado   |  `ont_r10_dorado_5khz`   | GRCh38_no_alt | Minimap2 |
 | ONT | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           |   Dorado   |  `ont_r10_dorado_4khz`   | GRCh38_no_alt | Minimap2 |
 | ONT | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           |   Guppy6   |   `ont_r10_guppy_4khz`   | GRCh38_no_alt | Minimap2 |
-| ONT |    ont_r10_guppy_5khz     |          R10.4.1, 5khz           |   Guppy6   |   `ont_r10_guppy_5khz`   | GRCh38_no_alt | Minimap2 |
+| ONT |    ont_r10_guppy_5khz     |          R10.4.1, 5khz           | Guppy6 HAC |   `ont_r10_guppy_5khz`   | GRCh38_no_alt | Minimap2 |
 |  Illumina   |           ilmn            |          NovaSeq/HiseqX          |     -      |          `ilmn`          |    GRCh38     | BWA-MEM  |
 | PacBio HiFi |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      |       `hifi_revio`       | GRCh38_no_alt | Minimap2 |
 
@@ -329,11 +329,11 @@ ClairS-TO by default tags variants if they exist in gnomAD, dbSNP, or 1000G PoN 
 
 Users can also use their own variants for tagging using the `--use_own_pon_resource` option.
 
-| Database name | Source | Visiting URL | Last visited | Total #Variants |        Filters        | #Variants used for tagging | Remaining Columns in the input |
-|:---------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:-------------------------:|:--------------:|:---------------------:|:--------------------------:|:-----------------------:|
-|  gnomAD   |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07  |  268,225,276   | Sites with AF ≥ 0.001 |         35,551,905         | #CHROM  POS ID  REF ALT |
-|   dbSNP   |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22  |   60,691,395   |   Non-Somatic sites   |         60,683,019         | #CHROM  POS ID  REF ALT |
-| 1000G PoN |  GATK  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32  |   2,609,566    |       All sites       |         2,609,566          | #CHROM  POS ID  REF ALT |
+| Database name |                                        URL                                         | Source |                                                    Source URL                                                    |      Last visited        | Total #Variants  |        Filters        | #Variants used for tagging | Remaining Columns in the input   |
+|:-------------:|:----------------------------------------------------------------------------------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:------------------------:|:----------------:|:---------------------:|:--------------------------:|:--------------------------------:|
+|   gnomAD      | http://www.bio8.cs.hku.hk/clairs-to/databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz |  GATK  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07 |   268,225,276    | Sites with AF ≥ 0.001 |         35,551,905         |     #CHROM  POS ID  REF ALT      |
+|     dbSNP     | http://www.bio8.cs.hku.hk/clairs-to/databases/dbsnp.b138.non-somatic.sites.vcf.gz  |  GATK  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22 |    60,691,395    |   Non-Somatic sites   |         60,683,019         |     #CHROM  POS ID  REF ALT      |
+|   1000G PoN   |        http://www.bio8.cs.hku.hk/clairs-to/databases/1000g-pon.sites.vcf.gz        |  GATK  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32 |    2,609,566     |       All sites       |         2,609,566          |     #CHROM  POS ID  REF ALT      |
 
 ------
 
