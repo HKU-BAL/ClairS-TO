@@ -280,21 +280,23 @@ def nonsomatic_tag(args):
                     columns = ori_row_str.split('\t')
                     if pos_info in input_inter_all_variant_dict_id_set_contig[contig]:
                         columns[6] = "NonSomatic"
-                        columns[7] = ""
+                        info_str_ori = columns[7]
+                        info_str_db = ""
                         if pos_info in input_inter_gnomad_variant_dict_id_set_contig[contig]:
-                            columns[7] += "gnomAD"
+                            info_str_db += "gnomAD"
                         if pos_info in input_inter_dbsnp_variant_dict_id_set_contig[contig]:
-                            if columns[7] != "":
-                                columns[7] += ";"
-                            columns[7] += "dbSNP"
+                            if info_str_db != "":
+                                info_str_db += ";"
+                            info_str_db += "dbSNP"
                         if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
-                            if columns[7] != "":
-                                columns[7] += ";"
-                            columns[7] += "1kGPoN"
+                            if info_str_db != "":
+                                info_str_db += ";"
+                            info_str_db += "1kGPoN"
                         if pos_info in input_inter_self_variant_dict_id_set_contig[contig]:
-                            if columns[7] != "":
-                                columns[7] += ";"
-                            columns[7] += "OwnPoN"
+                            if info_str_db != "":
+                                info_str_db += ";"
+                            info_str_db += "ownPoN"
+                        columns[7] = info_str_ori + ";" + info_str_db
                     row_str = '\t'.join(columns)
                     output.write(row_str)
                 else:
@@ -305,7 +307,7 @@ def nonsomatic_tag(args):
 
 
 def main():
-    parser = ArgumentParser(description="Non-somatic tagging for long-read data")
+    parser = ArgumentParser(description="Non-somatic tagging for pileup data")
 
     parser.add_argument('--ctg_name', type=str, default=None,
                         help="The name of sequence to be processed")
