@@ -50,11 +50,10 @@ from shared.interval_tree import bed_tree_from
 from shared.utils import file_path_from, folder_path_from, subprocess_popen, str2bool, str_none, \
     legal_range_from, log_error, log_warning
 
-
-major_contigs = {"chr" + str(a) for a in list(range(1, 23))}.union(
-    {str(a) for a in list(range(1, 23))})
-major_contigs_order = ["chr" + str(a) for a in list(range(1, 23))] + [str(a) for a in
-                                                                                   list(range(1, 23))]
+major_contigs = {"chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]}.union(
+    {str(a) for a in list(range(1, 23)) + ["X", "Y"]})
+major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
+                                                                                   list(range(1, 23)) + ["X", "Y"]]
 
 file_directory = os.path.dirname(os.path.realpath(__file__))
 main_entry = os.path.join(file_directory, "clairs_to.py")
@@ -329,7 +328,7 @@ def check_contigs_intersection(args, fai_fn):
     contig_set = set(args.ctg_name.split(',')) if is_ctg_name_list_provided else set()
 
     if not args.include_all_ctgs:
-        logging("[INFO] --include_all_ctgs not enabled, use chr{1..22} and {1..22} by default")
+        logging("[INFO] --include_all_ctgs not enabled, use chr{1..22,X,Y} and {1..22,X,Y} by default")
     else:
         logging("[INFO] --include_all_ctgs enabled")
 
@@ -515,13 +514,13 @@ def check_args(args):
             args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
 
     if args.gnomad_resource is None:
-        args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad_af_0.001_resource.vcf.gz')
+        args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz')
 
     if args.dbsnp_resource is None:
-        args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp_non_somatic_resource.vcf.gz')
+        args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp.b138.non-somatic.sites.vcf.gz')
 
     if args.pon_resource is None:
-        args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g_pon_resource.vcf.gz')
+        args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g-pon.sites.vcf.gz')
 
     args.gnomad_resource = file_path_from(file_name=args.gnomad_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
     args.dbsnp_resource = file_path_from(file_name=args.dbsnp_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
