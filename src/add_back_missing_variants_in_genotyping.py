@@ -39,8 +39,8 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from subprocess import Popen
 
-major_contigs_order = ["chr" + str(a) for a in list(range(1, 23))] + [str(a) for a in
-                                                                                   list(range(1, 23))]
+major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
+                                                                                   list(range(1, 23)) + ["X", "Y"]]
 
 def str_none(v):
     if v is None:
