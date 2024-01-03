@@ -113,6 +113,8 @@ def output_vcf_from_probability(
         position,
         reference_base,
         tumor_alt_info,
+        input_forward_acgt_count_ori,
+        input_reverse_acgt_count_ori,
         probabilities_a,
         probabilities_c,
         probabilities_g,
@@ -423,9 +425,14 @@ def output_vcf_from_probability(
     else:
         print('ERROR')
 
-    information_string = "."
+    input_list_forward_acgt_count_ori = eval(input_forward_acgt_count_ori)
+    input_list_reverse_acgt_count_ori = eval(input_reverse_acgt_count_ori)
+    input_list_acgt_count_ori = [x + y for x, y in zip(input_list_forward_acgt_count_ori, input_list_reverse_acgt_count_ori)]
+    FAU, FCU, FGU, FTU = int(input_list_forward_acgt_count_ori[0]), int(input_list_forward_acgt_count_ori[1]), int(input_list_forward_acgt_count_ori[2]), int(input_list_forward_acgt_count_ori[3])
+    RAU, RCU, RGU, RTU = int(input_list_reverse_acgt_count_ori[0]), int(input_list_reverse_acgt_count_ori[1]), int(input_list_reverse_acgt_count_ori[2]), int(input_list_reverse_acgt_count_ori[3])
+    AU, CU, GU, TU = int(input_list_acgt_count_ori[0]), int(input_list_acgt_count_ori[1]), int(input_list_acgt_count_ori[2]), int(input_list_acgt_count_ori[3])
 
-    AU, CU, GU, TU = decode_acgt_count(tumor_alt_type_list[0], reference_base, tumor_read_depth)
+    information_string = "FAU={};FCU={};FGU={};FTU={};RAU={};RCU={};RGU={};RTU={}".format(FAU, FCU, FGU, FTU, RAU, RCU, RGU, RTU)
 
     add_ad_tag = True
     AD = None
@@ -447,7 +454,8 @@ def output_vcf_from_probability(
                          AU=AU,
                          CU=CU,
                          GU=GU,
-                         TU=TU)
+                         TU=TU
+                         )
 
 def call_variants_from_probability(args):
     output_config = OutputConfig(
@@ -546,8 +554,8 @@ def call_variants_from_probability(args):
 
     for row_id, row in enumerate(fo):
         row = row.rstrip().split('\t')
-        chromosome, position, reference_base, tumor_alt_info, prediction_a, prediction_c, prediction_g, prediction_t, \
-            prediction_na, prediction_nc, prediction_ng, prediction_nt = row[:13]
+        chromosome, position, reference_base, tumor_alt_info, input_forward_acgt_count_ori, input_reverse_acgt_count_ori, prediction_a, prediction_c, prediction_g, prediction_t, \
+            prediction_na, prediction_nc, prediction_ng, prediction_nt = row[:15]
         probabilities_a = [float(item) for item in prediction_a.split()]
         probabilities_c = [float(item) for item in prediction_c.split()]
         probabilities_g = [float(item) for item in prediction_g.split()]
@@ -561,6 +569,8 @@ def call_variants_from_probability(args):
             position,
             reference_base,
             tumor_alt_info,
+            input_forward_acgt_count_ori,
+            input_reverse_acgt_count_ori,
             probabilities_a,
             probabilities_c,
             probabilities_g,
@@ -571,7 +581,7 @@ def call_variants_from_probability(args):
             probabilities_nt,
             likelihood_data_info_list,
             output_config=output_config,
-            vcf_writer=vcf_writer,
+            vcf_writer=vcf_writer
         )
 
     logging.info("[INFO] Total time elapsed: %.2f s" % (time() - variant_call_start_time))
