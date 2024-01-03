@@ -66,6 +66,8 @@ def print_output_message(
         position,
         reference_base,
         tumor_alt_info,
+        input_forward_acgt_count_ori,
+        input_reverse_acgt_count_ori,
         probabilities_a,
         probabilities_c,
         probabilities_g,
@@ -83,6 +85,8 @@ def print_output_message(
             position,
             reference_base,
             tumor_alt_info,
+            input_forward_acgt_count_ori,
+            input_reverse_acgt_count_ori,
             probabilities_a,
             probabilities_c,
             probabilities_g,
@@ -95,11 +99,13 @@ def print_output_message(
             vcf_writer=output_file
         )
     else:
-        output_file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+        output_file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
             chromosome,
             position,
             reference_base,
             tumor_alt_info,
+            input_forward_acgt_count_ori,
+            input_reverse_acgt_count_ori,
             ' '.join(["{:0.8f}".format(x) for x in probabilities_a]),
             ' '.join(["{:0.8f}".format(x) for x in probabilities_c]),
             ' '.join(["{:0.8f}".format(x) for x in probabilities_g]),
@@ -139,6 +145,8 @@ def tensor_generator_from(tensor_file_path, batch_size, pileup=False, min_rescal
             if min_rescale_cov is not None:
                 tumor_coverage = float(tumor_alt_info.split('-')[0])
                 tumor_rescale = float(min_rescale_cov) / tumor_coverage if tumor_coverage > min_rescale_cov else None
+            else:
+                tumor_rescale = None
 
             channel_size = param.pileup_channel_size
             tumor_channel_size = param.tumor_channel_size
@@ -200,7 +208,7 @@ def tensor_generator_from(tensor_file_path, batch_size, pileup=False, min_rescal
         f.wait()
 
 
-def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center_list, prediction_a, prediction_c,
+def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center_list, input_list_forward_acgt_count_ori, input_list_reverse_acgt_count_ori, prediction_a, prediction_c,
                           prediction_g, prediction_t, prediction_na, prediction_nc, prediction_ng, prediction_nt):
     batch_size = len(batch_chr_pos_seq)
 
@@ -224,6 +232,8 @@ def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center
             chr_pos_seq,
             tumor_alt_info,
             ref_center,
+            input_forward_acgt_count_ori,
+            input_reverse_acgt_count_ori,
             probabilities_a,
             probabilities_c,
             probabilities_g,
@@ -236,6 +246,8 @@ def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center
         batch_chr_pos_seq,
         tumor_alt_info_list,
         ref_center_list,
+        input_list_forward_acgt_count_ori,
+        input_list_reverse_acgt_count_ori,
         batch_probabilities_a,
         batch_probabilities_c,
         batch_probabilities_g,
@@ -250,6 +262,8 @@ def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center
             chr_pos_seq,
             tumor_alt_info,
             ref_center,
+            input_forward_acgt_count_ori,
+            input_reverse_acgt_count_ori,
             probabilities_a,
             probabilities_c,
             probabilities_g,
@@ -266,6 +280,8 @@ def output_with(
         chr_pos_seq,
         tumor_alt_info,
         ref_center,
+        input_forward_acgt_count_ori,
+        input_reverse_acgt_count_ori,
         probabilities_a,
         probabilities_c,
         probabilities_g,
@@ -290,6 +306,8 @@ def output_with(
         position,
         reference_base,
         tumor_alt_info,
+        input_forward_acgt_count_ori,
+        input_reverse_acgt_count_ori,
         probabilities_a,
         probabilities_c,
         probabilities_g,
@@ -390,11 +408,14 @@ def predict(args):
         mini_batches_to_output_acgt = []
         mini_batches_loaded_nacgt = []
         mini_batches_to_output_nacgt = []
+        mini_batches_loaded_acgt_ori = []
+        mini_batches_to_output_acgt_ori = []
 
         def load_mini_batch():
             try:
                 mini_batches_loaded_acgt.append(next(tensor_generator_acgt))
                 mini_batches_loaded_nacgt.append(next(tensor_generator_nacgt))
+                mini_batches_loaded_acgt_ori.append(next(tensor_generator_acgt_ori))
             except StopIteration:
                 return
 
@@ -410,23 +431,46 @@ def predict(args):
                                                  min_rescale_cov=param.min_rescale_cov,
                                                  platform=platform)
 
+        tensor_generator_acgt_ori = tensor_generator_from(tensor_file_path=tensor_fn_acgt,
+                                                 batch_size=param.predictBatchSize,
+                                                 pileup=args.pileup,
+                                                 min_rescale_cov=None,
+                                                 platform=platform)
+
         while True:
             thread_pool = []
-            if len(mini_batches_to_output_acgt) > 0 and len(mini_batches_to_output_acgt) > 0:
+            if len(mini_batches_to_output_acgt) > 0:
                 mini_batch_acgt = mini_batches_to_output_acgt.pop(0)
                 input_tensor_acgt, position, tumor_alt_info_list, variant_type_list, ref_center_list = mini_batch_acgt
 
                 mini_batch_nacgt = mini_batches_to_output_nacgt.pop(0)
                 input_tensor_nacgt, position_nacgt, tumor_alt_info_list_nacgt, variant_type_list_nacgt, ref_center_list_nacgt = mini_batch_nacgt
 
-                if args.pileup:
-                    input_matrix_acgt = torch.from_numpy(input_tensor_acgt).to(device)
-                    input_matrix_nacgt = torch.from_numpy(input_tensor_nacgt).to(device)
-                else:
-                    input_matrix_acgt = torch.from_numpy(np.transpose(input_tensor_acgt, (0, 3, 1, 2)) / 100.0).float().to(
-                        device)
-                    if input_matrix_acgt.shape[1] != param.channel_size:
-                        input_matrix_acgt = input_matrix_acgt[:, :param.channel_size, :, :]
+                mini_batch_acgt_ori = mini_batches_to_output_acgt_ori.pop(0)
+                input_tensor_acgt_ori, _, _, _, _ = mini_batch_acgt_ori
+
+                input_matrix_acgt = torch.from_numpy(input_tensor_acgt).to(device)
+                input_matrix_nacgt = torch.from_numpy(input_tensor_nacgt).to(device)
+                input_matrix_acgt_ori = input_tensor_acgt_ori
+
+                input_matrix_forward_acgt_count = input_matrix_acgt_ori[:, 16, 0:4]
+                input_matrix_reverse_acgt_count = input_matrix_acgt_ori[:, 16, 9:13]
+                input_matrix_forward_acgt_count_ori = input_matrix_forward_acgt_count.copy()
+                input_matrix_reverse_acgt_count_ori = input_matrix_reverse_acgt_count.copy()
+
+                negative_indices_forward = np.where(input_matrix_forward_acgt_count < 0)
+                row_indices_forward, col_indices_forward = negative_indices_forward
+                row_sums_forward = np.sum(input_matrix_forward_acgt_count[row_indices_forward], axis=1)
+                input_matrix_forward_acgt_count_ori[row_indices_forward, col_indices_forward] = row_sums_forward * -1
+                input_list_forward_acgt_count_ori = (np.where(input_matrix_forward_acgt_count_ori == -0, 0, input_matrix_forward_acgt_count_ori)).tolist()
+
+                negative_indices_reverse = np.where(input_matrix_reverse_acgt_count < 0)
+                row_indices_reverse, col_indices_reverse = negative_indices_reverse
+                row_sums_reverse = np.sum(input_matrix_reverse_acgt_count[row_indices_reverse], axis=1)
+                input_matrix_reverse_acgt_count_ori[row_indices_reverse, col_indices_reverse] = row_sums_reverse * -1
+                input_list_reverse_acgt_count_ori = (np.where(input_matrix_reverse_acgt_count_ori == -0, 0,
+                                                               input_matrix_reverse_acgt_count_ori)).tolist()
+
                 with torch.no_grad():
                     prediction_a, prediction_c, prediction_g, prediction_t = model_acgt(input_matrix_acgt)
                     prediction_na, prediction_nc, prediction_ng, prediction_nt = model_nacgt(input_matrix_nacgt)
@@ -450,7 +494,7 @@ def predict(args):
                 total += len(input_tensor_acgt)
                 thread_pool.append(Thread(
                     target=batch_output,
-                    args=(output_file, position, tumor_alt_info_list, ref_center_list, prediction_a, prediction_c,
+                    args=(output_file, position, tumor_alt_info_list, ref_center_list, input_list_forward_acgt_count_ori, input_list_reverse_acgt_count_ori, prediction_a, prediction_c,
                           prediction_g, prediction_t, prediction_na, prediction_nc, prediction_ng, prediction_nt)
                 ))
 
@@ -467,13 +511,13 @@ def predict(args):
                 mini_batch_acgt = mini_batches_loaded_acgt.pop(0)
                 mini_batches_to_output_acgt.append(mini_batch_acgt)
 
-            while len(mini_batches_loaded_acgt) > 0:
-                mini_batch_acgt = mini_batches_loaded_acgt.pop(0)
-                mini_batches_to_output_acgt.append(mini_batch_acgt)
-
             while len(mini_batches_loaded_nacgt) > 0:
                 mini_batch_nacgt = mini_batches_loaded_nacgt.pop(0)
                 mini_batches_to_output_nacgt.append(mini_batch_nacgt)
+
+            while len(mini_batches_loaded_acgt_ori) > 0:
+                mini_batch_acgt_ori = mini_batches_loaded_acgt_ori.pop(0)
+                mini_batches_to_output_acgt_ori.append(mini_batch_acgt_ori)
 
             is_nothing_to_predict_and_output = (
                     len(thread_pool) <= 0 and len(mini_batches_to_output_acgt) <= 0 and len(mini_batches_to_output_nacgt) <= 0
