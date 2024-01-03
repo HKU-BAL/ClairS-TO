@@ -48,15 +48,18 @@ def compress_index_vcf(input_vcf):
                           stderr=subprocess.PIPE)
 
 def mark_low_qual(row, quality_score_for_pass):
-    if row == '' or "NonSomatic" in row or "RefCall" in row:
+    if row == '' or "RefCall" in row:
         return row
     columns = row.split('\t')
     qual = float(columns[5])
     if quality_score_for_pass and qual < float(quality_score_for_pass):
-        columns[6] = "LowQual"
+        if "NonSomatic" in row:
+            columns[6] = "LowQual;NonSomatic"
+            columns[5] = "0.0000"
+        else:
+            columns[6] = "LowQual"
 
     return '\t'.join(columns)
-
 
 def update_GQ(columns):
     INFO = columns[8]
