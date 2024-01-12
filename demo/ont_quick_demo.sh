@@ -32,7 +32,7 @@ docker run -it \
   --tumor_bam_fn ${INPUT_DIR}/${TUMOR_BAM} \
   --ref_fn ${INPUT_DIR}/${REF} \
   --threads 4 \
-  --platform ont_r10_guppy_4khz \
+  --platform ont_r10_guppy_sup_4khz \
   --output_dir ${OUTPUT_DIR} \
   --region chr17:80000000-80100000
 
