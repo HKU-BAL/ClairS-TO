@@ -485,21 +485,30 @@ def check_args(args):
         sys.exit(log_error("[ERROR] Tumor BAM index file {} or {} not found. Please run `samtools index $BAM` first.".format(args.tumor_bam_fn + '.bai',
                                                                                       args.tumor_bam_fn + '.crai')))
 
-    if args.enable_indel_calling and args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'hifi_revio'}:
-        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10' and 'hifi_revio' platform"))
-
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
     if args.pileup_affirmative_model_path is None:
-        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'pileup_affirmative.pkl')
+        if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'pileup_affirmative.pkl')
+        elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'pileup_affirmative.pkl')
+        elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'pileup_affirmative.pkl')
+        elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'pileup_affirmative.pkl')
         else:
             args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmative.pkl')
 
     if args.pileup_negational_model_path is None:
-        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'pileup_negational.pkl')
+        if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'pileup_negational.pkl')
+        elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'pileup_negational.pkl')
+        elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'pileup_negational.pkl')
+        elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'pileup_negational.pkl')
         else:
             args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
 
@@ -508,8 +517,14 @@ def check_args(args):
     args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
 
     if args.likelihood_matrix_data is None:
-        if args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_4khz', 'likelihood_matrix.txt')
+        if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'likelihood_matrix.txt')
+        elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'likelihood_matrix.txt')
+        elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'likelihood_matrix.txt')
+        elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'likelihood_matrix.txt')
         else:
             args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
 
@@ -538,8 +553,11 @@ def check_args(args):
     if args.chunk_size is None:
         args.chunk_size = 5000000
 
-    if args.platform not in {'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'hifi_revio'}:
-        logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}'))
+    if args.min_bq is None:
+        args.min_bq = param.min_bq_dict[args.platform]
+
+    if args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'hifi_revio'}:
+        logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}'))
 
     if args.qual is None:
         if args.prefer_balance:
@@ -560,6 +578,7 @@ def check_args(args):
     legal_range_from(param_name="threads", x=args.threads, min_num=1, exit_out_of_range=True)
     legal_range_from(param_name="qual", x=args.qual, min_num=0, exit_out_of_range=True)
     legal_range_from(param_name="min_coverage", x=args.min_coverage, min_num=0, exit_out_of_range=True)
+    legal_range_from(param_name="min_bq", x=args.min_bq, min_num=0, exit_out_of_range=True)
     legal_range_from(param_name="snv_min_af", x=args.snv_min_af, min_num=0, max_num=1, exit_out_of_range=True)
     legal_range_from(param_name="indel_min_af", x=args.indel_min_af, min_num=0, max_num=1, exit_out_of_range=True)
     legal_range_from(param_name="chunk_size", x=args.chunk_size, min_num=0, exit_out_of_range=True)
@@ -598,7 +617,6 @@ def print_args(args):
     logging("[INFO] CHUNK SIZE: {}".format(args.chunk_size))
     logging("[INFO] SNV MINIMUM AF: {}".format(args.snv_min_af))
     logging("[INFO] ENABLE DRY RUN: {}".format(args.dry_run))
-    logging("[INFO] ENABLE INDEL CALLING: {}".format(args.enable_indel_calling))
     logging("[INFO] ENABLE PRINTING REFERENCE CALLS: {}".format(args.print_ref_calls))
     logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
     logging("[INFO] ENABLE REMOVING INTERMEDIATE FILES: {}".format(args.remove_intermediate_dir))
@@ -641,6 +659,7 @@ def print_command_line(args):
         cmdline += '--qual {} '.format(args.qual) if args.qual is not None else ""
         cmdline += '--snv_min_af {} '.format(args.snv_min_af) if args.snv_min_af is not None else ""
         cmdline += '--min_coverage {} '.format(args.min_coverage) if args.min_coverage is not None else ""
+        cmdline += '--min_bq {} '.format(args.min_bq) if args.min_bq is not None else ""
         cmdline += '--chunk_size {} '.format(args.chunk_size) if args.chunk_size is not None else ""
         cmdline += '--sample_name {} '.format(args.sample_name) if args.sample_name != "SAMPLE" else ""
         cmdline += '--output_prefix {} '.format(args.output_prefix) if args.output_prefix != "output" else ""
@@ -704,6 +723,7 @@ def somatic_calling(args):
     ec_command += ' --ctg_name {1} '
     ec_command += ' --platform ' + args.platform
     ec_command += ' --min_coverage ' + str(args.min_coverage)
+    ec_command += ' --min_bq ' + str(args.min_bq)
     ec_command += ' --bed_fn ' + os.path.join(args.output_dir, 'tmp', 'split_beds', '{1}')
     ec_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
     ec_command += ' --output_depth True '
@@ -727,6 +747,7 @@ def somatic_calling(args):
     cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
     cpt_aff_command += ' --ref_fn ' + args.ref_fn
     cpt_aff_command += ' --ctg_name {1/.}'
+    cpt_aff_command += ' --min_bq ' + str(args.min_bq)
     cpt_aff_command += ' --samtools ' + args.samtools
     cpt_aff_command += ' --candidates_bed_regions {1}'
     cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
@@ -886,7 +907,6 @@ def somatic_calling(args):
     sort_vcf_command += ' --platform ' + args.platform
     sort_vcf_command += ' --qual ' + str(args.qual)
     sort_vcf_command += ' --sample_name ' + str(args.sample_name)
-    sort_vcf_command += ' --enable_indel_calling ' + str(args.enable_indel_calling)
     sort_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
     sort_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_PV.log'
     commands_list += [sort_vcf_command]
@@ -980,7 +1000,7 @@ def somatic_parser():
         required=True,
         type=str,
         default=None,
-        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_4khz, ont_r10_dorado_5khz, ont_r10_guppy_4khz, ont_r10_guppy_5khz, ilmn, hifi_revio}."
+        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}."
     )
 
     optional_params = parser.add_argument_group('Optional parameters')
@@ -1227,6 +1247,14 @@ def somatic_parser():
         help=SUPPRESS
     )
 
+    ## Minimum base quality
+    optional_params.add_argument(
+        "--min_bq",
+        type=int,
+        default=None,
+        help=SUPPRESS
+    )
+
     ##If set then will use GPUs for inference. CUDA required
     optional_params.add_argument(
         "-g",
@@ -1350,9 +1378,6 @@ def main():
     runtime = time() - call_start_time
     logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime/60), int(runtime % 60)))
     logging("[INFO] Finish calling, output file: {}/{}.vcf.gz\n".format(args.output_dir, args.output_prefix))
-    if args.enable_indel_calling:
-        logging("[INFO] Finish calling, snv output file: {}/snv.vcf.gz\n".format(args.output_dir))
-        logging("[INFO] Finish calling, indel output file: {}/{}.vcf.gz\n".format(args.output_dir, args.indel_output_prefix))
 
     if args.tee is not None:
         args.tee.stdin.close()
