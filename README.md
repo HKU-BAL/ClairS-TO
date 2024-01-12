@@ -41,7 +41,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Latest Updates
 
-*v0.0.2 (Jan. 12, 2024)*: 1. Added ONT Guppy 5khz HAC model, check [here](#pre-trained-models) for more details. 2. Added `FAU`, `FCU`, `FGU`, `FTU`, `RAU`, `RCU`, `RGU`, and `RTU` tags. 3. Added `url` and `md5` information of the public databases (i.e., gnomAD, dbSNP, and 1000G PoN) to the VCF output header. 4. Enabled somatic variant calling in sex chromosomes. 5. Fixed an issue that missing public databases tagging for low-quality variants.
+*v0.0.2 (Jan. 12, 2024)*: 1. Added ONT Guppy 5kHz HAC model, check [here](#pre-trained-models) for more details. 2. Added `FAU`, `FCU`, `FGU`, `FTU`, `RAU`, `RCU`, `RGU`, and `RTU` tags. 3. Added `url` and `md5` information of the public databases (i.e., gnomAD, dbSNP, and 1000G PoN) to the VCF output header. 4. Enabled somatic variant calling in sex chromosomes. 5. Fixed an issue that missing public databases tagging for low-quality variants.
 
 *v0.0.1 (Dec. 4, 2023)*: Initial release for early access.
 
