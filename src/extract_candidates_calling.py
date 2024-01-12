@@ -194,7 +194,7 @@ def extract_pair_candidates(args):
     confident_bed_fn = file_path_from(args.bed_fn, allow_none=True, exit_on_not_found=False)
     is_confident_bed_file_given = confident_bed_fn is not None
     min_mapping_quality = args.min_mq
-    min_base_quality = args.min_bq if args.min_bq is not None else param.min_bq_dict[platform]
+    min_base_quality = args.min_bq
     flankingBaseNum = param.flankingBaseNum if args.flanking is None else args.flanking
     no_of_positions = 2 * flankingBaseNum + 1
     genotyping_mode_vcf_fn = args.genotyping_mode_vcf_fn
