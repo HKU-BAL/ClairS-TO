@@ -111,4 +111,3 @@ chmod +x pacbio_hifi_quick_demo.sh
 ```
 
 Check the results using `less ${HOME}/pacbio_hifi_quick_demo/output/output.vcf.gz`.
-
