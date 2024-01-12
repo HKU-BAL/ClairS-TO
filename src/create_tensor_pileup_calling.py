@@ -323,7 +323,7 @@ def create_tensor(args):
     extend_bed = file_path_from(args.extend_bed, allow_none=True, exit_on_not_found=False)
     is_extend_bed_file_given = extend_bed is not None
     min_mapping_quality = args.min_mq
-    min_base_quality = args.min_bq if args.min_bq is not None else param.min_bq_dict[platform]
+    min_base_quality = args.min_bq
     vcf_fn = args.vcf_fn
     is_known_vcf_file_provided = vcf_fn is not None
     phasing_info_in_bam = args.phase_tumor and args.platform == 'ont'
