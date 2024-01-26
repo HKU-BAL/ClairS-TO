@@ -14,6 +14,18 @@ from shared.utils import str2bool
 file_directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 main_entry = os.path.join(file_directory, "{}.py".format(param.caller_name))
 
+def delete_lines_after(target_str, delimiter):
+    lines = target_str.split('\n')
+    index = 0
+    for i, line in enumerate(lines):
+        if delimiter in line:
+            index = i
+            break
+    processed_lines = lines[:index+1]
+    processed_str = '\n'.join(processed_lines) + '\n'
+    return processed_str
+
+
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -133,9 +145,13 @@ def realign_variants(args):
     p_reader.read_vcf()
     p_input_variant_dict = p_reader.variant_dict
 
+    output_vcf_header = p_reader.header
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     p_vcf_writer = VcfWriter(vcf_fn=pileup_output_vcf_fn,
                              ctg_name=ctg_name,
                              ref_fn=args.ref_fn,
+                             header=output_vcf_header,
                              show_ref_calls=True)
 
     total_num = 0

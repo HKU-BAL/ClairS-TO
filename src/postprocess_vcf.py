@@ -33,12 +33,23 @@ import os
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
-from shared.vcf import VcfWriter
+from shared.vcf import VcfReader, VcfWriter
 import shared.param as param
 from shared.utils import log_warning, str2bool, str_none
 
 major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
                                                                                    list(range(1, 23)) + ["X", "Y"]]
+
+def delete_lines_after(target_str, delimiter):
+    lines = target_str.split('\n')
+    index = 0
+    for i, line in enumerate(lines):
+        if delimiter in line:
+            index = i
+            break
+    processed_lines = lines[:index+1]
+    processed_str = '\n'.join(processed_lines) + '\n'
+    return processed_str
 
 def compress_index_vcf(input_vcf):
     # use bgzip to compress vcf -> vcf.gz
@@ -81,6 +92,12 @@ def merge_vcf(args):
     max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls
     quality_score_for_pass = args.qual if args.qual is not None else param.min_thred_qual[platform]
     af_cut_off = args.af if args.af is not None else param.af_dict[platform]
+
+    pileup_vcf_reader = VcfReader(vcf_fn=args.pileup_vcf_fn,
+                         keep_row_str=False,
+                         filter_tag=None,
+                         save_header=True)
+    pileup_vcf_reader.read_vcf()
 
     pileup_input_variant_dict = defaultdict(str)
     row_count = 0
@@ -168,11 +185,15 @@ def merge_vcf(args):
     contigs_order = major_contigs_order + list(contig_dict.keys())
     contigs_order_list = sorted(contig_dict.keys(), key=lambda x: contigs_order.index(x))
 
+    output_vcf_header = pileup_vcf_reader.header
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     output_vcf_writer = VcfWriter(vcf_fn=args.output_fn,
                                  ctg_name=','.join(list(contig_dict.keys())),
                                  ref_fn=args.ref_fn,
                                  sample_name=args.sample_name,
                                  cmdline=cmdline,
+                                 header=output_vcf_header,
                                  show_ref_calls=True)
 
     for contig in contigs_order_list:

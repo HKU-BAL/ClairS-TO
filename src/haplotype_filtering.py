@@ -17,6 +17,18 @@ LOW_AF = 0.1
 min_hom_germline_af = 0.75
 eps = 0.2
 
+def delete_lines_after(target_str, delimiter):
+    lines = target_str.split('\n')
+    index = 0
+    for i, line in enumerate(lines):
+        if delimiter in line:
+            index = i
+            break
+    processed_lines = lines[:index+1]
+    processed_str = '\n'.join(processed_lines) + '\n'
+    return processed_str
+
+
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -359,7 +371,7 @@ def haplotype_filter(args):
     ctg_name = args.ctg_name
     threads = args.threads
     threads_low = max(1, int(threads * 4 / 5))
-    apply_post_processing = args.apply_post_processing
+    apply_haplotype_filtering = args.apply_haplotype_filtering
     pileup_vcf_fn = args.pileup_vcf_fn
     germline_vcf_fn = args.germline_vcf_fn
     flanking = args.flanking
@@ -369,7 +381,7 @@ def haplotype_filter(args):
         subprocess.run("mkdir -p {}".format(output_dir), shell=True)
 
     pileup_output_vcf_fn = os.path.join(output_dir, "pileup_filtering.vcf")
-    if not apply_post_processing:
+    if not apply_haplotype_filtering:
         subprocess.run("ln -sf {} {}".format(pileup_vcf_fn, pileup_output_vcf_fn), shell=True)
         return
 
@@ -434,9 +446,13 @@ def haplotype_filter(args):
             continue
         input_variant_dict[k] = v
 
+    output_vcf_header = input_vcf_reader.header
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     p_vcf_writer = VcfWriter(vcf_fn=pileup_output_vcf_fn,
                              ctg_name=ctg_name,
                              ref_fn=args.ref_fn,
+                             header=output_vcf_header,
                              show_ref_calls=True)
 
     hap_info_output_path = os.path.join(output_dir, "HAP_INFO")
@@ -562,8 +578,8 @@ def main():
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Absolute path to the 'samtools', samtools version >= 1.10 is required. Default: %(default)s")
     # options for advanced users
-    parser.add_argument('--apply_post_processing', type=str2bool, default=True,
-                        help="EXPERIMENTAL: Apply post processing to the variant calls")
+    parser.add_argument('--apply_haplotype_filtering', type=str2bool, default=True,
+                        help="EXPERIMENTAL: Apply haplotype filtering to the variant calls")
 
     parser.add_argument('--min_mq', type=int, default=param.min_mq,
                         help="EXPERIMENTAL: If set, reads with mapping quality with <$min_mq are filtered, default: %(default)d")

@@ -1,5 +1,6 @@
 import os
 import shlex
+import hashlib
 
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
@@ -9,6 +10,24 @@ from shared.utils import str2bool, str_none, reference_sequence_from, subprocess
 
 major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
                                                                                    list(range(1, 23)) + ["X", "Y"]]
+
+def calculate_file_md5(file_path):
+    md5_hash = hashlib.md5()
+
+    with open(file_path, 'rb') as file:
+        for chunk in iter(lambda: file.read(4096), b''):
+            md5_hash.update(chunk)
+
+    return md5_hash.hexdigest()
+
+
+def insert_after_line(original_str, target_line, insert_str):
+    lines = original_str.split('\n')
+    for i, line in enumerate(lines):
+        if line == target_line:
+            lines.insert(i+1, insert_str.rstrip('\n'))
+            break
+    return '\n'.join(lines)
 
 
 class VcfReader_Database(object):
@@ -61,18 +80,21 @@ class VcfReader_Database(object):
 
 
 def nonsomatic_tag(args):
-
+    nonsomatic_tag_vcf_header_info = ''
     ctg_name = args.ctg_name
-    disable_gnomad_tagging = args.disable_gnomad_tagging
-    disable_dbsnp_tagging = args.disable_dbsnp_tagging
-    disable_1kgpon_tagging = args.disable_1kgpon_tagging
     disable_print_nonsomatic_calls = args.disable_print_nonsomatic_calls
     pileup_vcf_fn = args.pileup_vcf_fn
+    panel_of_normals = args.panel_of_normals
+    pon_list = list(panel_of_normals.split(',')) if panel_of_normals is not None else []
 
-    gnomad_vcf_fn = args.gnomad_resource
-    dbsnp_vcf_fn = args.dbsnp_resource
-    pon_vcf_fn = args.pon_resource
-    self_vcf_fn = args.use_own_pon_resource
+    if panel_of_normals is not None:
+        if len(pon_list) >= 1:
+            pon_vcf_fn_list = pon_list
+        else:
+            pon_vcf_fn_list = []
+    else:
+        pon_vcf_fn_list = []
+
     pileup_output_vcf_fn = args.output_vcf_fn
 
     input_vcf_reader = VcfReader(vcf_fn=pileup_vcf_fn,
@@ -106,11 +128,6 @@ def nonsomatic_tag(args):
 
     nonsomatic_filter_variant_dict_id_set_contig = input_variant_dict_id_set_contig.copy()
 
-    input_inter_gnomad_variant_dict_id_set_contig = defaultdict(set)
-    input_inter_dbsnp_variant_dict_id_set_contig = defaultdict(set)
-    input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
-    input_inter_self_variant_dict_id_set_contig = defaultdict(set)
-
     total_input = 0
     for k, v in input_variant_dict_id_set_contig.items():
         total_input += len(input_variant_dict_id_set_contig[k])
@@ -120,133 +137,62 @@ def nonsomatic_tag(args):
 
     input_keys_list = list(input_variant_dict_id_set_contig.keys())
 
-    if not disable_gnomad_tagging and gnomad_vcf_fn is not None:
-        gnomad_vcf_reader = VcfReader(vcf_fn=gnomad_vcf_fn,
-                                      ctg_name=ctg_name,
-                                      keep_row_str=False,
-                                      filter_tag=None,
-                                      save_header=True)
-        gnomad_vcf_reader.read_vcf()
-        gnomad_input_variant_dict = gnomad_vcf_reader.variant_dict
-
-        gnomad_variant_dict_id_set_contig = defaultdict(set)
-        for k, v in gnomad_input_variant_dict.items():
-            if ctg_name is None:
-                if k[0] not in input_keys_list:
-                    continue
-                gnomad_variant_dict_id_set_contig[k[0]].add(
-                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+    input_inter_pon_variant_dict_id_set_contig_list = []
+    pon_vcf_header_info_list = []
+    if len(pon_vcf_fn_list) > 0:
+        for index, pon_vcf_fn in enumerate(pon_vcf_fn_list):
+            input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
+            if str(pon_vcf_fn).split('/')[-1] == 'dbsnp.b138.non-somatic.sites.vcf.gz':
+                pon_vcf_reader = VcfReader_Database(vcf_fn=str(pon_vcf_fn),
+                                                      ctg_name=ctg_name,
+                                                      keep_row_str=False,
+                                                      save_header=True)
             else:
-                gnomad_variant_dict_id_set_contig[ctg_name].add(
-                    (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+                pon_vcf_reader = VcfReader(vcf_fn=str(pon_vcf_fn),
+                                                ctg_name=ctg_name,
+                                                keep_row_str=False,
+                                                filter_tag=None,
+                                                save_header=True)
+            pon_vcf_reader.read_vcf()
+            pon_input_variant_dict = pon_vcf_reader.variant_dict
 
-        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
-            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
-                                                            gnomad_variant_dict_id_set_contig[k]
-            input_inter_gnomad_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
-                gnomad_variant_dict_id_set_contig[k])
+            pon_variant_dict_id_set_contig = defaultdict(set)
 
-        total_filter_by_gnomad = 0
+            for k, v in pon_input_variant_dict.items():
+                if ctg_name is None:
+                    if k[0] not in input_keys_list:
+                        continue
+                    pon_variant_dict_id_set_contig[k[0]].add(
+                        (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+                else:
+                    if str(pon_vcf_fn).split('/')[-1] == 'dbsnp.b138.non-somatic.sites.vcf.gz':
+                        pon_variant_dict_id_set_contig[ctg_name].add(
+                            (str(k[0]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+                    else:
+                        pon_variant_dict_id_set_contig[ctg_name].add(
+                            (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
 
-        for k, v in input_inter_gnomad_variant_dict_id_set_contig.items():
-            total_filter_by_gnomad += len(input_inter_gnomad_variant_dict_id_set_contig[k])
+            for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
+                nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
+                                                                  pon_variant_dict_id_set_contig[k]
+                input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
+                    pon_variant_dict_id_set_contig[k])
 
-        print("[INFO] Processing in {}: tagged by gnomAD resource: {}".format(ctg_name, total_filter_by_gnomad))
+            input_inter_pon_variant_dict_id_set_contig_list.append(
+                input_inter_pon_variant_dict_id_set_contig)
 
-    if not disable_dbsnp_tagging and dbsnp_vcf_fn is not None:
-        dbsnp_vcf_reader = VcfReader_Database(vcf_fn=dbsnp_vcf_fn,
-                                     ctg_name=ctg_name,
-                                     keep_row_str=False,
-                                     save_header=True)
-        dbsnp_vcf_reader.read_vcf()
-        dbsnp_input_variant_dict = dbsnp_vcf_reader.variant_dict
+            total_filter_by_pon = 0
 
-        dbsnp_variant_dict_id_set_contig = defaultdict(set)
+            for k, v in input_inter_pon_variant_dict_id_set_contig.items():
+                total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
 
-        for k, v in dbsnp_input_variant_dict.items():
-            if ctg_name is None:
-                if k[0] not in input_keys_list:
-                    continue
-                dbsnp_variant_dict_id_set_contig[k[0]].add(
-                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-            else:
-                dbsnp_variant_dict_id_set_contig[ctg_name].add(
-                    (str(k[0]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
+            print("[INFO] Processing in {}: tagged by {} PoN: {}".format(ctg_name, str(pon_vcf_fn), total_filter_by_pon))
 
-        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
-            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - dbsnp_variant_dict_id_set_contig[k]
-            input_inter_dbsnp_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(dbsnp_variant_dict_id_set_contig[k])
+            pon_vcf_md5 = calculate_file_md5(str(pon_vcf_fn))
+            pon_vcf_header_info = '##INFO=<ID=PoN_{},Number=0,Type=Flag,Description="file={},md5={},non-somatic variant tagged by panel of normals">'.format(index + 1, str(pon_vcf_fn), pon_vcf_md5)
+            pon_vcf_header_info_list.append(pon_vcf_header_info)
 
-        total_filter_by_dbsnp = 0
-
-        for k, v in input_inter_dbsnp_variant_dict_id_set_contig.items():
-            total_filter_by_dbsnp += len(input_inter_dbsnp_variant_dict_id_set_contig[k])
-
-        print("[INFO] Processing in {}: tagged by dbSNP resource: {}".format(ctg_name, total_filter_by_dbsnp))
-
-    if not disable_1kgpon_tagging and pon_vcf_fn is not None:
-        pon_vcf_reader = VcfReader(vcf_fn=pon_vcf_fn,
-                                   ctg_name=ctg_name,
-                                   keep_row_str=False,
-                                   filter_tag=None,
-                                   save_header=True)
-        pon_vcf_reader.read_vcf()
-        pon_input_variant_dict = pon_vcf_reader.variant_dict
-
-        pon_variant_dict_id_set_contig = defaultdict(set)
-
-        for k, v in pon_input_variant_dict.items():
-            if ctg_name is None:
-                pon_variant_dict_id_set_contig[k[0]].add(
-                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-            else:
-                pon_variant_dict_id_set_contig[ctg_name].add(
-                    (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-
-        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
-            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
-                                                            pon_variant_dict_id_set_contig[k]
-            input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
-                pon_variant_dict_id_set_contig[k])
-
-        total_filter_by_pon = 0
-
-        for k, v in input_inter_pon_variant_dict_id_set_contig.items():
-            total_filter_by_pon += len(input_inter_pon_variant_dict_id_set_contig[k])
-
-        print("[INFO] Processing in {}: tagged by 1000G PoN resource: {}".format(ctg_name, total_filter_by_pon))
-
-    if self_vcf_fn is not None:
-        self_vcf_reader = VcfReader(vcf_fn=self_vcf_fn,
-                                    ctg_name=ctg_name,
-                                    keep_row_str=False,
-                                    filter_tag=None,
-                                    save_header=True)
-        self_vcf_reader.read_vcf()
-        self_input_variant_dict = self_vcf_reader.variant_dict
-
-        self_variant_dict_id_set_contig = defaultdict(set)
-
-        for k, v in self_input_variant_dict.items():
-            if ctg_name is None:
-                self_variant_dict_id_set_contig[k[0]].add(
-                    (str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-            else:
-                self_variant_dict_id_set_contig[ctg_name].add(
-                    (str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0]))
-
-        for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
-            nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
-                                                            self_variant_dict_id_set_contig[k]
-            input_inter_self_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
-                self_variant_dict_id_set_contig[k])
-
-        total_filter_by_self = 0
-
-        for k, v in input_inter_self_variant_dict_id_set_contig.items():
-            total_filter_by_self += len(input_inter_self_variant_dict_id_set_contig[k])
-
-        print("[INFO] Processing in  {}: tagged by own PoN resource: {}".format(ctg_name, total_filter_by_self))
+            nonsomatic_tag_vcf_header_info += (pon_vcf_header_info + '\n')
 
     input_inter_all_variant_dict_id_set_contig = defaultdict(set)
 
@@ -263,13 +209,20 @@ def nonsomatic_tag(args):
     for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
         total_remain_passes += len(nonsomatic_filter_variant_dict_id_set_contig[k])
 
-    print("[INFO] Processing in {}: tagged by all database resources: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
+    print("[INFO] Processing in {}: tagged by all panel of normals: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
 
     contigs_order = major_contigs_order + input_keys_list
     contigs_order_list = sorted(input_keys_list, key=lambda x: contigs_order.index(x))
 
+    original_input_vcf_header = input_vcf_reader.header
+    last_filter_line = '##FILTER=<ID=RefCall,Description="Reference call">'
+    if nonsomatic_tag_vcf_header_info != '':
+        new_nonsomatic_tag_vcf_header = insert_after_line(original_input_vcf_header, last_filter_line, nonsomatic_tag_vcf_header_info)
+    else:
+        new_nonsomatic_tag_vcf_header = original_input_vcf_header
+
     with open(pileup_output_vcf_fn, 'w') as output:
-        output.write(input_vcf_reader.header)
+        output.write(new_nonsomatic_tag_vcf_header)
         for contig in contigs_order_list:
             all_pos_info = sorted(input_variant_dict_id_set_contig[contig], key=lambda x: int(x.split('\t')[0]))
             for pos_info in all_pos_info:
@@ -282,20 +235,12 @@ def nonsomatic_tag(args):
                         columns[6] = "NonSomatic"
                         info_str_ori = columns[7]
                         info_str_db = ""
-                        if pos_info in input_inter_gnomad_variant_dict_id_set_contig[contig]:
-                            info_str_db += "gnomAD"
-                        if pos_info in input_inter_dbsnp_variant_dict_id_set_contig[contig]:
-                            if info_str_db != "":
-                                info_str_db += ";"
-                            info_str_db += "dbSNP"
-                        if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
-                            if info_str_db != "":
-                                info_str_db += ";"
-                            info_str_db += "1kGPoN"
-                        if pos_info in input_inter_self_variant_dict_id_set_contig[contig]:
-                            if info_str_db != "":
-                                info_str_db += ";"
-                            info_str_db += "ownPoN"
+                        if len(input_inter_pon_variant_dict_id_set_contig_list) > 0:
+                            for index, input_inter_pon_variant_dict_id_set_contig in enumerate(input_inter_pon_variant_dict_id_set_contig_list):
+                                if pos_info in input_inter_pon_variant_dict_id_set_contig[contig]:
+                                    if info_str_db != "":
+                                        info_str_db += ";"
+                                    info_str_db += "PoN_{}".format(str(index + 1))
                         columns[7] = info_str_ori + ";" + info_str_db
                     row_str = '\t'.join(columns)
                     output.write(row_str)
@@ -315,17 +260,8 @@ def main():
     parser.add_argument('--pileup_vcf_fn', type=str, default=None,
                         help="Pileup VCF input")
 
-    parser.add_argument('--gnomad_resource', type=str, default=None,
-                        help="Use gnomAD database resource to tag non-somatic variant")
-
-    parser.add_argument('--dbsnp_resource', type=str, default=None,
-                        help="Use dbSNP database resource to tag non-somatic variant")
-
-    parser.add_argument('--pon_resource', type=str, default=None,
-                        help="Use 1000G PoN resource to tag non-somatic variant")
-
-    parser.add_argument('--use_own_pon_resource', type=str, default=None,
-                        help="Use own variants in VCF format for tagging")
+    parser.add_argument('--panel_of_normals', type=str, default=None,
+                        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' for multiple PoNs. Default: if not specified, provided 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', and '1000g-pon.sites.vcf.gz' PoNs will be included")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")
@@ -345,35 +281,14 @@ def main():
     parser.add_argument('--parallel', type=str, default="parallel",
                         help="Absolute path of parallel, parallel >= 20191122 is required")
 
-    parser.add_argument('--show_ref', action='store_true',
-                        help="Show reference calls (0/0) in VCF file")
-
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Absolute path to the 'samtools', samtools version >= 1.10 is required. Default: %(default)s")
 
-    parser.add_argument(
-        "--disable_gnomad_tagging",
-        action='store_true',
-        help="Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD."
-    )
+    parser.add_argument('--show_ref', action='store_true',
+                        help="Show reference calls (0/0) in VCF file")
 
-    parser.add_argument(
-        "--disable_dbsnp_tagging",
-        action='store_true',
-        help="Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbSNP."
-    )
-
-    parser.add_argument(
-        "--disable_1kgpon_tagging",
-        action='store_true',
-        help="Disable using 1000G PoN for non-somatic variants tagging. Default: enable using 1000G PoN."
-    )
-
-    parser.add_argument(
-        "--disable_print_nonsomatic_calls",
-        action='store_true',
-        help="Disable print non-somatic calls. Default: enable non-somatic calls printing."
-    )
+    parser.add_argument("--disable_print_nonsomatic_calls", action='store_true',
+                        help="Disable print non-somatic calls. Default: enable non-somatic calls printing")
 
     global args
     args = parser.parse_args()

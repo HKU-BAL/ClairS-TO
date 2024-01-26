@@ -38,6 +38,7 @@ import subprocess
 
 from collections import defaultdict, namedtuple
 from argparse import SUPPRESS
+
 try:
     from packaging.version import parse as version_parse
 except ModuleNotFoundError:
@@ -87,11 +88,13 @@ class Tee(object):
     def flush(self):
         self.file.flush()
 
+
 def logging(str):
     if args.tee is None:
         print(str)
     else:
         args.tee.stdin.write(bytes(str + '\n', encoding='utf8'))
+
 
 def create_output_folder(args):
     # create temp file folder
@@ -100,8 +103,10 @@ def create_output_folder(args):
     tmp_file_path = folder_path_from(os.path.join(args.output_dir, 'tmp'), create_not_found=True)
     split_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_beds'), create_not_found=True)
     candidates_path = folder_path_from(os.path.join(tmp_file_path, 'candidates'), create_not_found=True)
-    pileup_tensor_can_affirmative_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_affirmative'), create_not_found=True)
-    pileup_tensor_can_negational_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_negational'), create_not_found=True)
+    pileup_tensor_can_affirmative_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_affirmative'),
+                                                          create_not_found=True)
+    pileup_tensor_can_negational_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_negational'),
+                                                         create_not_found=True)
     vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'vcf_output'), create_not_found=True)
 
     output_path = OutputPath(log_path=log_path,
@@ -112,6 +117,7 @@ def create_output_folder(args):
                              pileup_tensor_can_negational_path=pileup_tensor_can_negational_path,
                              vcf_output_path=vcf_output_path)
     return output_path
+
 
 def check_version(tool, pos=None, is_pypy=False):
     try:
@@ -130,6 +136,7 @@ def check_version(tool, pos=None, is_pypy=False):
 
     return version
 
+
 def check_skip_steps_legal(args):
     skip_steps = args.skip_steps
     skip_steps_list = skip_steps.rstrip().split(",")
@@ -137,19 +144,22 @@ def check_skip_steps_legal(args):
         sys.exit(log_error("[ERROR] --skip_steps option provided but no skip steps index found"))
     for step in skip_steps_list:
         if int(step) < 1 or int(step) > MAX_STEP:
-            sys.exit(log_error("[ERROR] --skip_steps option provided but contains invalid skip steps index, should be 1-index"))
+            sys.exit(log_error(
+                "[ERROR] --skip_steps option provided but contains invalid skip steps index, should be 1-index"))
+
 
 def check_python_path():
     python_path = subprocess.run("which python", stdout=subprocess.PIPE, shell=True).stdout.decode().rstrip()
     sys.exit(log_error("[ERROR] Current python execution path: {}".format(python_path)))
 
+
 def check_python_version(python):
-    python_path = subprocess.run("{} --version".format(python), stdout=subprocess.PIPE, shell=True).stdout.decode().rstrip()
+    python_path = subprocess.run("{} --version".format(python), stdout=subprocess.PIPE,
+                                 shell=True).stdout.decode().rstrip()
     return python_path.split(' ')[1]
 
 
 def check_tools_version(args):
-
     required_tool_version = {
         'python': version_parse('3.9.0'),
         'pypy': version_parse('3.6'),
@@ -167,10 +177,12 @@ def check_tools_version(args):
     for tool, version in tool_version.items():
         required_version = required_tool_version[tool]
         if version is None:
-            logging(log_error("[ERROR] {} not found, please check if you are in the conda virtual environment".format(tool)))
+            logging(log_error(
+                "[ERROR] {} not found, please check if you are in the conda virtual environment".format(tool)))
             check_python_path()
         elif version < required_version:
-            logging(log_error("[ERROR] Tool version not match, please check if you are in the conda virtual environment"))
+            logging(
+                log_error("[ERROR] Tool version not match, please check if you are in the conda virtual environment"))
             logging(' '.join([str(item).ljust(10) for item in ["Tool", "Version", "Required"]]))
             error_info = ' '.join([str(item).ljust(10) for item in [tool, version, '>=' + str(required_version)]])
             logging(error_info)
@@ -196,7 +208,8 @@ def check_contig_in_bam(bam_fn, sorted_contig_list, samtools, allow_none=False, 
     for contig_name in sorted_contig_list:
         if contig_name not in contig_with_read_support_set:
             logging(log_warning(
-                "[WARNING] Contig name {} provided but no mapped reads found in {} BAM, skip!".format(flag, contig_name)))
+                "[WARNING] Contig name {} provided but no mapped reads found in {} BAM, skip!".format(flag,
+                                                                                                      contig_name)))
     filtered_sorted_contig_list = [item for item in sorted_contig_list if item in contig_with_read_support_set]
 
     found_contig = True
@@ -211,7 +224,7 @@ def check_contig_in_bam(bam_fn, sorted_contig_list, samtools, allow_none=False, 
 
 def check_threads(args):
     threads = args.threads
-    #sched_getaffinity is not exist in pypy
+    # sched_getaffinity is not exist in pypy
     try:
         sched_getaffinity_list = list(os.sched_getaffinity(0))
         num_cpus = len(sched_getaffinity_list)
@@ -226,6 +239,7 @@ def check_threads(args):
         logging(log_warning('Set --threads={} for better parallelism.'.format(num_cpus)))
         args.threads = num_cpus
     return args
+
 
 def split_extend_vcf(genotyping_mode_vcf_fn, output_fn):
     expand_region_size = param.no_of_positions
@@ -242,7 +256,8 @@ def split_extend_vcf(genotyping_mode_vcf_fn, output_fn):
         ctg_start, ctg_end = center_pos - 1, center_pos
         if ctg_start < 0:
             sys.exit(
-                log_error("[ERROR] Invalid VCF input at the {}-th row {} {} {}".format(row_id + 1, ctg_name, center_pos)))
+                log_error(
+                    "[ERROR] Invalid VCF input at the {}-th row {} {} {}".format(row_id + 1, ctg_name, center_pos)))
         if ctg_start - expand_region_size < 0:
             continue
         expand_ctg_start = ctg_start - expand_region_size
@@ -294,8 +309,8 @@ def split_extend_bed(bed_fn, output_fn, contig_set=None):
     unzip_process.stdout.close()
     unzip_process.wait()
 
-def write_region_bed(region):
 
+def write_region_bed(region):
     try:
         ctg_name, start_end = region.split(':')
         ctg_start, ctg_end = int(start_end.split('-')[0]) - 1, int(start_end.split('-')[1]) - 1  # bed format
@@ -310,8 +325,8 @@ def write_region_bed(region):
         f.write('\t'.join([ctg_name, str(ctg_start), str(ctg_end)]) + '\n')
     return output_bed_path
 
-def check_contigs_intersection(args, fai_fn):
 
+def check_contigs_intersection(args, fai_fn):
     MIN_CHUNK_LENGTH = 200000
     MAX_CHUNK_LENGTH = 20000000
     is_include_all_contigs = args.include_all_ctgs
@@ -324,7 +339,8 @@ def check_contigs_intersection(args, fai_fn):
 
     split_bed_path = os.path.join(args.output_dir, 'tmp', 'split_beds')
     tree = bed_tree_from(bed_file_path=args.bed_fn, region=args.region)
-    know_vcf_contig_set = split_extend_vcf(genotyping_mode_vcf_fn=args.genotyping_mode_vcf_fn, output_fn=split_bed_path) if is_known_vcf_file_provided else set()
+    know_vcf_contig_set = split_extend_vcf(genotyping_mode_vcf_fn=args.genotyping_mode_vcf_fn,
+                                           output_fn=split_bed_path) if is_known_vcf_file_provided else set()
     contig_set = set(args.ctg_name.split(',')) if is_ctg_name_list_provided else set()
 
     if not args.include_all_ctgs:
@@ -333,10 +349,12 @@ def check_contigs_intersection(args, fai_fn):
         logging("[INFO] --include_all_ctgs enabled")
 
     if is_ctg_name_list_provided and is_bed_file_provided:
-        logging(log_warning("[WARNING] both --ctg_name and --bed_fn provided, will only proceed with the contigs appeared in both"))
+        logging(log_warning(
+            "[WARNING] both --ctg_name and --bed_fn provided, will only proceed with the contigs appeared in both"))
 
     if is_ctg_name_list_provided and is_known_vcf_file_provided:
-        logging(log_warning("[WARNING] both --ctg_name and --genotyping_mode_vcf_fn provided, will only proceed with the contigs appeared in both"))
+        logging(log_warning(
+            "[WARNING] both --ctg_name and --genotyping_mode_vcf_fn provided, will only proceed with the contigs appeared in both"))
 
     if is_ctg_name_list_provided:
         contig_set = contig_set.intersection(
@@ -361,8 +379,8 @@ def check_contigs_intersection(args, fai_fn):
             columns = row.strip().split("\t")
             contig_name, contig_length = columns[0], int(columns[1])
             if not is_include_all_contigs and (
-            not (is_bed_file_provided or is_ctg_name_list_provided or is_known_vcf_file_provided)) and str(
-                    contig_name) not in major_contigs:
+                    not (is_bed_file_provided or is_ctg_name_list_provided or is_known_vcf_file_provided)) and str(
+                contig_name) not in major_contigs:
                 continue
 
             if is_bed_file_provided and contig_name not in tree:
@@ -391,13 +409,19 @@ def check_contigs_intersection(args, fai_fn):
     if not len(contig_set):
         if is_bed_file_provided:
             all_contig_in_bed = ' '.join(list(tree.keys()))
-            logging(log_warning("[WARNING] No contig in --bed_fn was found in the reference, contigs in BED {}: {}".format(args.bed_fn, all_contig_in_bed)))
+            logging(log_warning(
+                "[WARNING] No contig in --bed_fn was found in the reference, contigs in BED {}: {}".format(args.bed_fn,
+                                                                                                           all_contig_in_bed)))
         if is_known_vcf_file_provided:
             all_contig_in_vcf = ' '.join(list(know_vcf_contig_set))
-            logging(log_warning("[WARNING] No contig in --genotyping_mode_vcf_fn was found in the reference, contigs in VCF {}: {}".format(args.genotyping_mode_vcf_fn, all_contig_in_vcf)))
+            logging(log_warning(
+                "[WARNING] No contig in --genotyping_mode_vcf_fn was found in the reference, contigs in VCF {}: {}".format(
+                    args.genotyping_mode_vcf_fn, all_contig_in_vcf)))
         if is_ctg_name_list_provided:
             all_contig_in_ctg_name = ' '.join(args.ctg_name.split(','))
-            logging(log_warning("[WARNING] No contig in --ctg_name was found in the reference, contigs in contigs list: {}".format(all_contig_in_ctg_name)))
+            logging(log_warning(
+                "[WARNING] No contig in --ctg_name was found in the reference, contigs in contigs list: {}".format(
+                    all_contig_in_ctg_name)))
         found_contig = False
     else:
         for c in sorted_contig_list:
@@ -405,8 +429,9 @@ def check_contigs_intersection(args, fai_fn):
                 logging(log_warning(("[WARNING] Contig {} given but not found in the reference".format(c))))
 
         # check contig in bam have support reads
-        sorted_contig_list, tumor_found_contig = check_contig_in_bam(bam_fn=args.tumor_bam_fn, sorted_contig_list=sorted_contig_list,
-                                                               samtools=args.samtools, is_tumor=True)
+        sorted_contig_list, tumor_found_contig = check_contig_in_bam(bam_fn=args.tumor_bam_fn,
+                                                                     sorted_contig_list=sorted_contig_list,
+                                                                     samtools=args.samtools, is_tumor=True)
 
         found_contig = tumor_found_contig
 
@@ -454,13 +479,13 @@ def check_contigs_intersection(args, fai_fn):
 
 
 def check_args(args):
-
     if args.conda_prefix is None:
         if 'CONDA_PREFIX' in os.environ:
             args.conda_prefix = os.environ['CONDA_PREFIX']
         else:
             try:
-                python_path = subprocess.run('which python', stdout=subprocess.PIPE, shell=True).stdout.decode().rstrip()
+                python_path = subprocess.run('which python', stdout=subprocess.PIPE,
+                                             shell=True).stdout.decode().rstrip()
                 args.conda_prefix = os.path.dirname(os.path.dirname(python_path))
             except:
                 sys.exit(log_error("[ERROR] Conda prefix not found, please activate a correct conda environment."))
@@ -473,73 +498,126 @@ def check_args(args):
     args.ref_fn = file_path_from(file_name=args.ref_fn, exit_on_not_found=True)
     fai_fn = file_path_from(file_name=args.ref_fn, suffix=".fai", exit_on_not_found=True, sep='.')
     args.bed_fn = file_path_from(file_name=args.bed_fn, exit_on_not_found=True, allow_none=True)
-    args.genotyping_mode_vcf_fn = file_path_from(file_name=args.genotyping_mode_vcf_fn, exit_on_not_found=True, allow_none=True)
+    args.genotyping_mode_vcf_fn = file_path_from(file_name=args.genotyping_mode_vcf_fn, exit_on_not_found=True,
+                                                 allow_none=True)
     args.hybrid_mode_vcf_fn = file_path_from(file_name=args.hybrid_mode_vcf_fn, exit_on_not_found=True, allow_none=True)
 
     if args.platform in param.model_name_platform_dict:
         updated_platform = param.model_name_platform_dict[args.platform]
-        logging("[INFO] Platform parameter is using ONT model name format, change --platform {} to --platform {}".format(args.platform, updated_platform))
+        logging(
+            "[INFO] Platform parameter is using ONT model name format, change --platform {} to --platform {}".format(
+                args.platform, updated_platform))
         args.platform = updated_platform
 
     if tumor_bai_fn is None and tumor_crai_fn is None and tumor_csi_fn is None:
-        sys.exit(log_error("[ERROR] Tumor BAM index file {} or {} not found. Please run `samtools index $BAM` first.".format(args.tumor_bam_fn + '.bai',
-                                                                                      args.tumor_bam_fn + '.crai')))
+        sys.exit(log_error(
+            "[ERROR] Tumor BAM index file {} or {} not found. Please run `samtools index $BAM` first.".format(
+                args.tumor_bam_fn + '.bai',
+                args.tumor_bam_fn + '.crai')))
 
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
     if args.pileup_affirmative_model_path is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'pileup_affirmative.pkl')
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ont_r10_guppy_sup_4khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'pileup_affirmative.pkl')
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ont_r10_dorado_sup_5khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'pileup_affirmative.pkl')
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ont_r10_dorado_sup_4khz', 'pileup_affirmative.pkl')
+        elif args.platform == 'ont_r10_dorado_hac_4khz':
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ont_r10_dorado_hac_4khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'pileup_affirmative.pkl')
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ont_r10_guppy_hac_5khz', 'pileup_affirmative.pkl')
         else:
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_affirmative.pkl')
+            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              args.platform, 'pileup_affirmative.pkl')
 
     if args.pileup_negational_model_path is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'pileup_negational.pkl')
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ont_r10_guppy_sup_4khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'pileup_negational.pkl')
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ont_r10_dorado_sup_5khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'pileup_negational.pkl')
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ont_r10_dorado_sup_4khz', 'pileup_negational.pkl')
+        elif args.platform == 'ont_r10_dorado_hac_4khz':
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ont_r10_dorado_hac_4khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'pileup_negational.pkl')
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ont_r10_guppy_hac_5khz', 'pileup_negational.pkl')
         else:
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'pileup_negational.pkl')
+            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             args.platform, 'pileup_negational.pkl')
 
-    args.pileup_affirmative_model_path = file_path_from(file_name=args.pileup_affirmative_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
+    args.pileup_affirmative_model_path = file_path_from(file_name=args.pileup_affirmative_model_path,
+                                                        exit_on_not_found=True, is_directory=False, allow_none=False)
 
-    args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path, exit_on_not_found=True, is_directory=False, allow_none=False)
+    args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path,
+                                                       exit_on_not_found=True, is_directory=False, allow_none=False)
 
     if args.likelihood_matrix_data is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_sup_4khz', 'likelihood_matrix.txt')
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ont_r10_guppy_sup_4khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_5khz', 'likelihood_matrix.txt')
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ont_r10_dorado_sup_5khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_dorado_sup_4khz', 'likelihood_matrix.txt')
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ont_r10_dorado_sup_4khz', 'likelihood_matrix.txt')
+        elif args.platform == 'ont_r10_dorado_hac_4khz':
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ont_r10_dorado_hac_4khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', 'ont_r10_guppy_hac_5khz', 'likelihood_matrix.txt')
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ont_r10_guppy_hac_5khz', 'likelihood_matrix.txt')
         else:
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform, 'likelihood_matrix.txt')
+            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
+                                                       'likelihood_matrix.txt')
 
-    if args.gnomad_resource is None:
-        args.gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz')
+    default_gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases',
+                                           'gnomad.r2.1.af-ge-0.001.sites.vcf.gz')
+    default_dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases',
+                                          'dbsnp.b138.non-somatic.sites.vcf.gz')
+    default_1kgpon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g-pon.sites.vcf.gz')
 
-    if args.dbsnp_resource is None:
-        args.dbsnp_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'dbsnp.b138.non-somatic.sites.vcf.gz')
+    default_gnomad_resource = file_path_from(file_name=default_gnomad_resource, exit_on_not_found=True,
+                                             is_directory=False, allow_none=True)
+    default_dbsnp_resource = file_path_from(file_name=default_dbsnp_resource, exit_on_not_found=True,
+                                            is_directory=False, allow_none=True)
+    default_1kgpon_resource = file_path_from(file_name=default_1kgpon_resource, exit_on_not_found=True,
+                                             is_directory=False, allow_none=True)
 
-    if args.pon_resource is None:
-        args.pon_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', '1000g-pon.sites.vcf.gz')
-
-    args.gnomad_resource = file_path_from(file_name=args.gnomad_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
-    args.dbsnp_resource = file_path_from(file_name=args.dbsnp_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
-    args.pon_resource = file_path_from(file_name=args.pon_resource, exit_on_not_found=True, is_directory=False, allow_none=True)
+    if args.panel_of_normals is not None:
+        if args.panel_of_normals == 'None' or args.panel_of_normals == 'Null' or args.panel_of_normals == ' ':
+            args.disable_nonsomatic_tagging = True
+        else:
+            panel_of_normals_list = list(args.panel_of_normals.split(','))
+            for pon in panel_of_normals_list:
+                pon_path = file_path_from(file_name=str(pon), exit_on_not_found=True, is_directory=False,
+                                          allow_none=True)
+            if str(default_gnomad_resource) not in panel_of_normals_list:
+                logging(log_warning(
+                    "[INFO] Default {} PoN is not included!".format(str(default_gnomad_resource))))
+            if str(default_dbsnp_resource) not in panel_of_normals_list:
+                logging(log_warning(
+                    "[INFO] Default {} PoN is not included!".format(str(default_dbsnp_resource))))
+            if str(default_1kgpon_resource) not in panel_of_normals_list:
+                logging(log_warning(
+                    "[INFO] Default {} PoN is not included!".format(str(default_1kgpon_resource))))
+            args.panel_of_normals = args.panel_of_normals
+    else:
+        args.panel_of_normals = str(default_gnomad_resource) + ',' + str(default_dbsnp_resource) + ',' + str(
+            default_1kgpon_resource)
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
@@ -556,22 +634,29 @@ def check_args(args):
     if args.min_bq is None:
         args.min_bq = param.min_bq_dict[args.platform]
 
-    if args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz', 'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'hifi_revio'}:
-        logging(log_error('[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}'))
+    if args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz',
+                             'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz',
+                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn',
+                             'hifi_revio'}:
+        logging(log_error(
+            '[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}'))
 
     if args.qual is None:
         if args.prefer_balance:
-            args.qual = param.best_thred_qual[args.platform] if args.platform in param.best_thred_qual else param.best_thred_qual['ont']
+            args.qual = param.best_thred_qual[args.platform] if args.platform in param.best_thred_qual else \
+            param.best_thred_qual['ont']
         else:
             # default we enable min_thred_qual
-            args.qual = param.min_thred_qual[args.platform] if args.platform in param.min_thred_qual else param.min_thred_qual['ont']
+            args.qual = param.min_thred_qual[args.platform] if args.platform in param.min_thred_qual else \
+            param.min_thred_qual['ont']
     if args.skip_steps is not None:
         check_skip_steps_legal(args)
     if args.enable_realignment and args.platform != 'ilmn':
         args.enable_realignment = False
 
     if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
-        logging(log_warning("[INFO] Enable --print_ref_calls option and disable --disable_print_nonsomatic_calls in genotyping mode!"))
+        logging(log_warning(
+            "[INFO] Enable --print_ref_calls option and disable --disable_print_nonsomatic_calls in genotyping mode!"))
         args.print_ref_calls = True
         args.disable_print_nonsomatic_calls = False
 
@@ -593,7 +678,6 @@ def check_args(args):
 
 
 def print_args(args):
-
     logging("")
     logging("[INFO] CALLER VERSION: {}".format(param.version))
     logging("[INFO] TUMOR BAM FILE PATH: {}".format(args.tumor_bam_fn))
@@ -620,12 +704,9 @@ def print_args(args):
     logging("[INFO] ENABLE PRINTING REFERENCE CALLS: {}".format(args.print_ref_calls))
     logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
     logging("[INFO] ENABLE REMOVING INTERMEDIATE FILES: {}".format(args.remove_intermediate_dir))
-    logging("[INFO] DISABLE APPLY NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
-    logging("[INFO] DISABLE APPLY GNOMAD TAGGING: {}".format(args.disable_gnomad_tagging))
-    logging("[INFO] DISABLE APPLY DBSNP TAGGING: {}".format(args.disable_dbsnp_tagging))
-    logging("[INFO] DISABLE APPLY 1000G PON TAGGING: {}".format(args.disable_1kgpon_tagging))
-    logging("[INFO] USE OWN PON RESOURCE: {}".format(args.use_own_pon_resource is not None))
-    logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS WITH DATABASES: {}".format(args.disable_print_nonsomatic_calls))
+    logging("[INFO] DISABLE APPLYING NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
+    logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS: {}".format(args.disable_print_nonsomatic_calls))
+    logging("[INFO] PANEL OF NORMALS: {}".format(args.panel_of_normals))
     logging("")
 
     if args.platform.startswith('ont'):
@@ -640,8 +721,8 @@ def print_args(args):
 
     return args
 
-def print_command_line(args):
 
+def print_command_line(args):
     try:
         cmdline = os.path.realpath(__file__)
         cmdline += ' --tumor_bam_fn {} '.format(args.tumor_bam_fn)
@@ -649,13 +730,17 @@ def print_command_line(args):
         cmdline += '--threads {} '.format(args.threads)
         cmdline += '--platform {} '.format(args.platform)
         cmdline += '--output_dir {} '.format(args.output_dir)
-        cmdline += '--pileup_affirmative_model_path {} '.format(args.pileup_affirmative_model_path) if args.pileup_affirmative_model_path is not None else ""
-        cmdline += '--pileup_negational_model_path {} '.format(args.pileup_negational_model_path) if args.pileup_negational_model_path is not None else ""
+        cmdline += '--pileup_affirmative_model_path {} '.format(
+            args.pileup_affirmative_model_path) if args.pileup_affirmative_model_path is not None else ""
+        cmdline += '--pileup_negational_model_path {} '.format(
+            args.pileup_negational_model_path) if args.pileup_negational_model_path is not None else ""
         cmdline += '--ctg_name {} '.format(args.ctg_name) if args.ctg_name is not None else ""
         cmdline += '--region {} '.format(args.region) if args.region is not None else ""
         cmdline += '--bed_fn {} '.format(args.bed_fn) if args.bed_fn is not None else ""
-        cmdline += '--genotyping_mode_vcf_fn {} '.format(args.genotyping_mode_vcf_fn) if args.genotyping_mode_vcf_fn is not None else ""
-        cmdline += '--hybrid_mode_vcf_fn {} '.format(args.hybrid_mode_vcf_fn) if args.hybrid_mode_vcf_fn is not None else ""
+        cmdline += '--genotyping_mode_vcf_fn {} '.format(
+            args.genotyping_mode_vcf_fn) if args.genotyping_mode_vcf_fn is not None else ""
+        cmdline += '--hybrid_mode_vcf_fn {} '.format(
+            args.hybrid_mode_vcf_fn) if args.hybrid_mode_vcf_fn is not None else ""
         cmdline += '--qual {} '.format(args.qual) if args.qual is not None else ""
         cmdline += '--snv_min_af {} '.format(args.snv_min_af) if args.snv_min_af is not None else ""
         cmdline += '--min_coverage {} '.format(args.min_coverage) if args.min_coverage is not None else ""
@@ -666,7 +751,6 @@ def print_command_line(args):
         cmdline += '--remove_intermediate_dir ' if args.remove_intermediate_dir else ""
         cmdline += '--include_all_ctgs ' if args.include_all_ctgs else ""
         cmdline += '--print_ref_calls ' if args.print_ref_calls else ""
-        cmdline += '--disable_print_nonsomatic_calls ' if args.disable_print_nonsomatic_calls else ""
         cmdline += '--python {} '.format(args.python) if args.python != "python3" else ""
         cmdline += '--pypy {} '.format(args.pypy) if args.pypy != "pypy3" else ""
         cmdline += '--samtools {} '.format(args.samtools) if args.samtools != "samtools" else ""
@@ -676,15 +760,10 @@ def print_command_line(args):
         cmdline += '--use_gpu ' if args.use_gpu else ""
         cmdline += '--indel_min_af {} '.format(args.indel_min_af) if args.indel_min_af is not None else ""
         cmdline += '--enable_realignment False ' if args.enable_realignment is False else ""
-        cmdline += '--apply_post_processing False ' if args.apply_post_processing is False else ""
+        cmdline += '--apply_haplotype_filtering False ' if args.apply_haplotype_filtering is False else ""
         cmdline += '--disable_nonsomatic_tagging ' if args.disable_nonsomatic_tagging else ""
-        cmdline += '--disable_gnomad_tagging ' if args.disable_gnomad_tagging else ""
-        cmdline += '--disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ""
-        cmdline += '--disable_1kgpon_tagging ' if args.disable_1kgpon_tagging else ""
-        cmdline += '--gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ""
-        cmdline += '--dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ""
-        cmdline += '--pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ""
-        cmdline += '--use_own_pon_resource {} '.format(args.use_own_pon_resource) if args.use_own_pon_resource is not None else ""
+        cmdline += '--disable_print_nonsomatic_calls ' if args.disable_print_nonsomatic_calls else ""
+        cmdline += '--panel_of_normals {} '.format(args.panel_of_normals) if args.panel_of_normals is not None else ""
         cmdline += '--skip_steps {} '.format(args.skip_steps) if args.skip_steps is not None else ""
         cmdline += '--conda_prefix {} '.format(args.conda_prefix) if args.conda_prefix is not None else ""
         args.cmdline = cmdline
@@ -693,8 +772,8 @@ def print_command_line(args):
     logging("[COMMAND] " + cmdline + '\n')
     return args
 
-def somatic_calling(args):
 
+def somatic_calling(args):
     step = 1
     echo_list = []
     commands_list = []
@@ -705,8 +784,8 @@ def somatic_calling(args):
     except subprocess.CalledProcessError as e:
         time = ''
 
-    #Pileup calling
-    #STEP 1: EXTRACT CANDIDATES
+    # Pileup calling
+    # STEP 1: EXTRACT CANDIDATES
     echo_list.append("[INFO] STEP {}: Extract Variant Candidates from Tumor BAM".format(step))
     step += 1
     ec_command = '( ' + time + args.parallel
@@ -758,7 +837,8 @@ def somatic_calling(args):
 
     if args.platform == 'ilmn':
         echo_list.append("[INFO] Create Tensors for Negational Model")
-        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*', args.output_dir + '/tmp/pileup_tensor_can_negational/')]
+        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*',
+                                                args.output_dir + '/tmp/pileup_tensor_can_negational/')]
 
     else:
         echo_list.append("[INFO] Create Tensors for Negational Model")
@@ -798,7 +878,7 @@ def somatic_calling(args):
     p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
     commands_list += [p_predict_command]
 
-    ## STEP 4: CALL VARIANTS
+    # STEP 4: CALL VARIANTS
     echo_list.append("[INFO] Pileup Model Calling Variants")
     cv_command = '( ' + time + args.parallel
     cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants.log'
@@ -807,7 +887,8 @@ def somatic_calling(args):
     cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
     cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
     cv_command += ' --platform ' + args.platform
-    cv_command += ' --likelihood_matrix_data {} '.format(args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
+    cv_command += ' --likelihood_matrix_data {} '.format(
+        args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
     cv_command += ' --show_ref ' if args.print_ref_calls else ""
     cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
     cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS.log'
@@ -825,7 +906,7 @@ def somatic_calling(args):
 
     if not args.disable_nonsomatic_tagging:
         # STEP 6: NON-SOMATIC TAGGING
-        echo_list.append("[INFO] STEP 3: Non-somatic Tagging with Databases")
+        echo_list.append("[INFO] STEP 3: Non-somatic Tagging")
         gf_command = '( ' + time + args.parallel
         gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-4_nonsomatic_tagging.log'
         gf_command += ' -j ' + str(args.threads)
@@ -836,14 +917,9 @@ def somatic_calling(args):
         gf_command += ' --pypy3 ' + args.pypy
         gf_command += ' --parallel ' + args.parallel
         gf_command += ' --show_ref ' if args.print_ref_calls else ''
-        gf_command += ' --disable_gnomad_tagging ' if args.disable_gnomad_tagging else ''
-        gf_command += ' --disable_dbsnp_tagging ' if args.disable_dbsnp_tagging else ''
-        gf_command += ' --disable_1kgpon_tagging ' if args.disable_1kgpon_tagging else ''
-        gf_command += ' --gnomad_resource {} '.format(args.gnomad_resource) if args.gnomad_resource is not None else ''
-        gf_command += ' --dbsnp_resource {} '.format(args.dbsnp_resource) if args.dbsnp_resource is not None else ''
-        gf_command += ' --pon_resource {} '.format(args.pon_resource) if args.pon_resource is not None else ''
-        gf_command += ' --use_own_pon_resource {} '.format(args.use_own_pon_resource) if args.use_own_pon_resource is not None else ''
         gf_command += ' --disable_print_nonsomatic_calls ' if args.disable_print_nonsomatic_calls else ''
+        gf_command += ' --panel_of_normals {} '.format(
+            args.panel_of_normals) if args.panel_of_normals is not None else ''
         gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
         gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/3_NONSOMATIC_TAG.log'
         commands_list += [gf_command]
@@ -860,8 +936,9 @@ def somatic_calling(args):
 
     else:
         # STEP 6: NON-SOMATIC TAGGING
-        echo_list.append("[INFO] STEP 3: Non-somatic Tagging with Databases")
-        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf', args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf')]
+        echo_list.append("[INFO] STEP 3: Non-somatic Tagging")
+        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf',
+                                                args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf')]
 
     if args.platform == 'ilmn':
         # STEP 7: SHORT-READ REALIGNMENT
@@ -894,7 +971,7 @@ def somatic_calling(args):
         hap_g_command += ' --threads ' + str(args.threads)
         hap_g_command += ' --debug ' if args.debug else ''
         hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
-        hap_g_command += ' --apply_post_processing False' if not args.apply_post_processing else ''
+        hap_g_command += ' --apply_haplotype_filtering False' if not args.apply_haplotype_filtering else ''
         hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER.log'
         commands_list += [hap_g_command]
 
@@ -932,14 +1009,14 @@ def somatic_calling(args):
         logging(command)
         logging("")
         if not args.dry_run:
-            if skip_steps is not None and str(i+1) in skip_steps:
-                logging("[INFO] --skip_steps is enabled, skip running step {}.".format(i+1))
+            if skip_steps is not None and str(i + 1) in skip_steps:
+                logging("[INFO] --skip_steps is enabled, skip running step {}.".format(i + 1))
                 logging("")
                 continue
             try:
                 return_code = subprocess.check_call(command, shell=True, stdout=stdout)
             except subprocess.CalledProcessError as e:
-                sys.stderr.write("ERROR in STEP {}, THE FOLLOWING COMMAND FAILED: {}\n".format(i+1, command))
+                sys.stderr.write("ERROR in STEP {}, THE FOLLOWING COMMAND FAILED: {}\n".format(i + 1, command))
                 exit(1)
         logging("")
 
@@ -949,7 +1026,6 @@ def somatic_calling(args):
 
 
 def somatic_parser():
-
     parser = argparse.ArgumentParser(
         description="Run ClairS-TO for tumor-only somatic variant calling. Example run: run_clairs_to -T TUMOR_BAM -R REF -o OUTPUT_DIR -t THREADS -p PLATFORM")
 
@@ -1000,7 +1076,7 @@ def somatic_parser():
         required=True,
         type=str,
         default=None,
-        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}."
+        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}."
     )
 
     optional_params = parser.add_argument_group('Optional parameters')
@@ -1090,57 +1166,17 @@ def somatic_parser():
         help="Minimal coverage required for a variant to be called. Default: 4."
     )
 
-    ##Apply non-somatic filtering for all data
+    optional_params.add_argument(
+        "--panel_of_normals",
+        type=str,
+        default=None,
+        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' for multiple PoNs. Default: if not specified, provided 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', and '1000g-pon.sites.vcf.gz' PoNs will be included."
+    )
+
     optional_params.add_argument(
         "--disable_nonsomatic_tagging",
         action='store_true',
         help="Disable non-somatic variants tagging. Default: enable non-somatic variants tagging."
-    )
-
-    optional_params.add_argument(
-        "--disable_gnomad_tagging",
-        action='store_true',
-        help="Disable using gnomAD database for non-somatic variants tagging. Default: enable using gnomAD."
-    )
-
-    optional_params.add_argument(
-        "--disable_dbsnp_tagging",
-        action='store_true',
-        help="Disable using dbSNP database for non-somatic variants tagging. Default: enable using dbSNP."
-    )
-
-    optional_params.add_argument(
-        "--disable_1kgpon_tagging",
-        action='store_true',
-        help="Disable using 1000G PoN for non-somatic variants tagging. Default: enable using 1000G PoN."
-    )
-
-    optional_params.add_argument(
-        "--gnomad_resource",
-        type=str,
-        default=None,
-        help=SUPPRESS
-    )
-
-    optional_params.add_argument(
-        "--dbsnp_resource",
-        type=str,
-        default=None,
-        help=SUPPRESS
-    )
-
-    optional_params.add_argument(
-        "--pon_resource",
-        type=str,
-        default=None,
-        help=SUPPRESS
-    )
-
-    optional_params.add_argument(
-        "--use_own_pon_resource",
-        type=str,
-        default=None,
-        help="Use own variants in VCF format for tagging."
     )
 
     optional_params.add_argument(
@@ -1289,7 +1325,7 @@ def somatic_parser():
 
     ##Apply haplotype filtering for long-read data
     optional_params.add_argument(
-        "--apply_post_processing",
+        "--apply_haplotype_filtering",
         type=str2bool,
         default=True,
         help=SUPPRESS
@@ -1346,6 +1382,7 @@ def somatic_parser():
 
     return parser
 
+
 def main():
     """
     Main interface for ClairS-TO.
@@ -1376,11 +1413,12 @@ def main():
     somatic_calling(args)
 
     runtime = time() - call_start_time
-    logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime/60), int(runtime % 60)))
+    logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime / 60), int(runtime % 60)))
     logging("[INFO] Finish calling, output file: {}/{}.vcf.gz\n".format(args.output_dir, args.output_prefix))
 
     if args.tee is not None:
         args.tee.stdin.close()
+
 
 if __name__ == '__main__':
     main()
