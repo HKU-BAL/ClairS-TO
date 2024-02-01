@@ -138,7 +138,7 @@ singularity exec \
   --threads ${THREADS} \                       ## maximum threads to be used
   --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR} \                 ## output path prefix
-  --conda_prefix /opt/conda/envs/clairs-to
+  --conda_prefix /opt/micromamba/envs/clairs-to
 ```
 
 ### Option 3. Build a micromamba (or anaconda) virtual environment
