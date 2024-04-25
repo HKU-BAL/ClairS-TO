@@ -127,11 +127,10 @@ def realign_variants(args):
     ctg_name = args.ctg_name
     threads = args.threads
     threads_low = max(1, int(threads * 4 / 5))
-    output_dir = args.output_dir
     enable_realignment = args.enable_realignment
-    qual_cut_off = args.qual if args.qual is not None else param.qual_dict['ilmn']
+    is_indel = args.is_indel
 
-    pileup_output_vcf_fn = os.path.join(output_dir, "pileup_filtering.vcf")
+    pileup_output_vcf_fn = args.output_vcf_fn
     if not enable_realignment:
         subprocess.run("ln -sf {} {}".format(args.pileup_vcf_fn, pileup_output_vcf_fn), shell=True)
         return
@@ -140,13 +139,14 @@ def realign_variants(args):
                          ctg_name=ctg_name,
                          show_ref=args.show_ref,
                          keep_row_str=True,
+                         discard_indel=False if is_indel else True,
                          filter_tag=None,
                          save_header=True)
     p_reader.read_vcf()
     p_input_variant_dict = p_reader.variant_dict
 
     output_vcf_header = p_reader.header
-    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T in the tumor BAM">'
     output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     p_vcf_writer = VcfWriter(vcf_fn=pileup_output_vcf_fn,
                              ctg_name=ctg_name,
@@ -171,17 +171,21 @@ def realign_variants(args):
         pos = k if ctg_name is not None else k[1]
         contig = ctg_name if ctg_name is not None else k[0]
         row_str = v.row_str.rstrip()
-        if (contig, pos) in realign_fail_pos_set and float(v.qual) < param.qual_dict['ilmn']:
-            row_str = row_str.replace("PASS", "LowQual")
+        columns = row_str.split('\t')
+        if (contig, pos) in realign_fail_pos_set:
+            columns[5] = '0.0000'
+            columns[6] = "LowQual"
+            columns[6] += ";"
+            columns[6] += "Realignment"
+
+        row_str = '\t'.join(columns)
 
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     p_vcf_writer.close()
 
-    if ctg_name is not None:
-        print("[INFO] {}: {} called variants filtered by short-read realignment".format(ctg_name, len(realign_fail_pos_set)))
-    else:
-        print("[INFO] {} called variants filtered by realignment".format(len(realign_fail_pos_set)))
+    print("[INFO] Total input calls: {}, filtered by realignment: {}".format(len(p_input_variant_values),
+                                                                             len(realign_fail_pos_set)))
 
 
 def main():
@@ -201,6 +205,9 @@ def main():
 
     parser.add_argument('--output_dir', type=str, default=None,
                         help="Output vcf directory")
+
+    parser.add_argument('--output_vcf_fn', type=str, default=None,
+                        help="Output vcf file")
 
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Path to the 'samtools', samtools version >= 1.10 is required. default: %(default)s")
@@ -222,13 +229,17 @@ def main():
                         help="EXPERIMENTAL: If set, bases with base quality with <$min_bq are filtered, default: %(default)d")
 
     parser.add_argument('--enable_realignment', type=str2bool, default=True,
-                        help="EXPERIMENTAL; Enable realignment for illumina calling, default: enable")
+                        help="EXPERIMENTAL: Enable realignment for Illumina calling, default: enabled")
 
     parser.add_argument('--qual', type=float, default=None,
                         help="EXPERIMENTAL: Maximum QUAL to realign a variant")
 
     # options for debug purpose
     parser.add_argument('--pos', type=int, default=None,
+                        help=SUPPRESS)
+
+    ## filtering for Indel candidates
+    parser.add_argument('--is_indel', action='store_true',
                         help=SUPPRESS)
 
     if len(sys.argv[1:]) == 0:
