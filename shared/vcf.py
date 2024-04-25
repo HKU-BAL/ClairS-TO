@@ -18,24 +18,34 @@ vcf_header = dedent("""\
             ##FILTER=<ID=PASS,Description="All filters passed">
             ##FILTER=<ID=NonSomatic,Description="Non-somatic variant tagged by panel of normals">
             ##FILTER=<ID=LowQual,Description="Low-quality variant">
+            ##FILTER=<ID=LowAltBQ,Description="Average alt allele base quality <20">
+            ##FILTER=<ID=LowAltMQ,Description="Average alt allele read mapping quality <20">
+            ##FILTER=<ID=ReadStartEnd,Description=">30% of the supporting alt alleles are within 100bp of the start or end of a read">
+            ##FILTER=<ID=VariantCluster,Description="Three or more variants clustered within 200bp">
+            ##FILTER=<ID=NoAncestry,Description="Variant without an ancestral haplotype support">
+            ##FILTER=<ID=MultiHap,Description="Alt alleles existed in multiple haplotypes">
+            ##FILTER=<ID=StrandBias,Description="Strand bias p-value <0.001">
+            ##FILTER=<ID=Realignment,Description="For short-read, both the count of supporting alt alleles and AF decreased after realignment">
             ##FILTER=<ID=RefCall,Description="Reference call">
-            ##INFO=<ID=FAU,Number=1,Type=Integer,Description="Count of A in forward strand">
-            ##INFO=<ID=FCU,Number=1,Type=Integer,Description="Count of C in forward strand">
-            ##INFO=<ID=FGU,Number=1,Type=Integer,Description="Count of G in forward strand">
-            ##INFO=<ID=FTU,Number=1,Type=Integer,Description="Count of T in forward strand">
-            ##INFO=<ID=RAU,Number=1,Type=Integer,Description="Count of A in reverse strand">
-            ##INFO=<ID=RCU,Number=1,Type=Integer,Description="Count of C in reverse strand">
-            ##INFO=<ID=RGU,Number=1,Type=Integer,Description="Count of G in reverse strand">
-            ##INFO=<ID=RTU,Number=1,Type=Integer,Description="Count of T in reverse strand">
+            ##INFO=<ID=H,Number=0,Type=Flag,Description="Variant found only in one haplotype in the phased reads">
+            ##INFO=<ID=FAU,Number=1,Type=Integer,Description="Count of A in forward strand in the tumor BAM">
+            ##INFO=<ID=FCU,Number=1,Type=Integer,Description="Count of C in forward strand in the tumor BAM">
+            ##INFO=<ID=FGU,Number=1,Type=Integer,Description="Count of G in forward strand in the tumor BAM">
+            ##INFO=<ID=FTU,Number=1,Type=Integer,Description="Count of T in forward strand in the tumor BAM">
+            ##INFO=<ID=RAU,Number=1,Type=Integer,Description="Count of A in reverse strand in the tumor BAM">
+            ##INFO=<ID=RCU,Number=1,Type=Integer,Description="Count of C in reverse strand in the tumor BAM">
+            ##INFO=<ID=RGU,Number=1,Type=Integer,Description="Count of G in reverse strand in the tumor BAM">
+            ##INFO=<ID=RTU,Number=1,Type=Integer,Description="Count of T in reverse strand in the tumor BAM">
+            ##INFO=<ID=SB,Number=1,Type=Float,Description="The p-value of Fisher’s exact test on strand bias">
             ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
             ##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
             ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
             ##FORMAT=<ID=AF,Number=1,Type=Float,Description="Estimated allele frequency">
             ##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed in the ALT column">
-            ##FORMAT=<ID=AU,Number=1,Type=Integer,Description="Count of A">
-            ##FORMAT=<ID=CU,Number=1,Type=Integer,Description="Count of C">
-            ##FORMAT=<ID=GU,Number=1,Type=Integer,Description="Count of G">
-            ##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">
+            ##FORMAT=<ID=AU,Number=1,Type=Integer,Description="Count of A in the tumor BAM">
+            ##FORMAT=<ID=CU,Number=1,Type=Integer,Description="Count of C in the tumor BAM">
+            ##FORMAT=<ID=GU,Number=1,Type=Integer,Description="Count of G in the tumor BAM">
+            ##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T in the tumor BAM">
             """.format(caller_name, version)
                     )
 
@@ -129,12 +139,14 @@ class VcfWriter(object):
         if row_str is not None:
             self.vcf_writer.write(row_str)
             return
-        GQ = GQ if GQ else QUAL
+        # GQ = GQ if GQ else QUAL
+        GQ = GQ if GQ else int(float(QUAL))
         CHROM = CHROM if CHROM else self.ctg_name
         if not self.show_ref_calls and (GT == "0/0" or GT == "./."):
             return
         FORMAT = "GT:GQ:DP:AF"
-        FORMAT_V = "%s:%.4f:%d:%.4f" % (GT, GQ, DP, AF)
+        # FORMAT_V = "%s:%.4f:%d:%.4f" % (GT, GQ, DP, AF)
+        FORMAT_V = "%s:%d:%d:%.4f" % (GT, GQ, DP, AF)
         basic_vcf_format = "%s\t%d\t%s\t%s\t%s\t%.4f\t%s\t%s" % (
             CHROM,
             int(POS),
@@ -183,6 +195,7 @@ class VcfReader(object):
                  save_header=False,
                  min_qual=None,
                  max_qual=None,
+                 discard_snv=False,
                  discard_indel=False,
                  keep_af=False):
         self.vcf_fn = vcf_fn
@@ -201,6 +214,7 @@ class VcfReader(object):
         self.taf_filter = taf_filter
         self.header = ""
         self.save_header = save_header
+        self.discard_snv = discard_snv
         self.discard_indel = discard_indel
         self.min_qual = min_qual
         self.max_qual = max_qual
@@ -249,6 +263,9 @@ class VcfReader(object):
                 genotype_2 = int(columns[5])
             else:
                 reference, alternate, last_column = columns[3], columns[4], columns[-1]
+
+                if self.discard_snv and (len(reference) == 1 and len(alternate) == 1):
+                    continue
 
                 if self.discard_indel and (len(reference) > 1 or len(alternate) > 1):
                     continue
