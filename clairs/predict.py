@@ -41,7 +41,10 @@ from threading import Thread
 from sys import stderr
 from subprocess import PIPE, run, Popen
 
+sys.path.insert(0, '/autofs/bal13/lchen/ClairS-TO/ClairS-TO')
+
 from clairs.call_variants import output_vcf_from_probability, OutputConfig
+from clairs.model import CvT, BiGRU_NACGT, CvT_Indel, BiGRU_NACGT_Indel
 from shared.utils import IUPAC_base_to_ACGT_base_dict as BASE2ACGT, BASIC_BASES, str2bool, file_path_from, log_error, \
     log_warning, subprocess_popen, TensorStdout
 import shared.param as param
@@ -72,11 +75,16 @@ def print_output_message(
         probabilities_c,
         probabilities_g,
         probabilities_t,
+        probabilities_i,
+        probabilities_d,
         probabilities_na,
         probabilities_nc,
         probabilities_ng,
         probabilities_nt,
-        extra_infomation_string=""
+        probabilities_ni,
+        probabilities_nd,
+        extra_infomation_string="",
+        disable_indel_calling=False
 ):
     global call_fn
     if call_fn is not None:
@@ -91,31 +99,59 @@ def print_output_message(
             probabilities_c,
             probabilities_g,
             probabilities_t,
+            probabilities_i,
+            probabilities_d,
             probabilities_na,
             probabilities_nc,
             probabilities_ng,
             probabilities_nt,
+            probabilities_ni,
+            probabilities_nd,
             output_config=output_config,
-            vcf_writer=output_file
+            vcf_writer=output_file,
+            disable_indel_calling=disable_indel_calling
         )
     else:
-        output_file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-            chromosome,
-            position,
-            reference_base,
-            tumor_alt_info,
-            input_forward_acgt_count_ori,
-            input_reverse_acgt_count_ori,
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_a]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_c]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_g]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_t]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_na]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_nc]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_ng]),
-            ' '.join(["{:0.8f}".format(x) for x in probabilities_nt]),
-            extra_infomation_string
-        ))
+        if not disable_indel_calling:
+            output_file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+                chromosome,
+                position,
+                reference_base,
+                tumor_alt_info,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_a]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_c]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_g]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_t]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_i]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_d]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_na]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_nc]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_ng]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_nt]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_ni]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_nd]),
+                extra_infomation_string
+            ))
+        else:
+            output_file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
+                chromosome,
+                position,
+                reference_base,
+                tumor_alt_info,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_a]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_c]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_g]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_t]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_na]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_nc]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_ng]),
+                ' '.join(["{:0.8f}".format(x) for x in probabilities_nt]),
+                extra_infomation_string
+            ))
 
 
 def tensor_generator_from(tensor_file_path, batch_size, pileup=False, min_rescale_cov=None, platform='ont'):
@@ -209,7 +245,7 @@ def tensor_generator_from(tensor_file_path, batch_size, pileup=False, min_rescal
 
 
 def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center_list, input_list_forward_acgt_count_ori, input_list_reverse_acgt_count_ori, prediction_a, prediction_c,
-                          prediction_g, prediction_t, prediction_na, prediction_nc, prediction_ng, prediction_nt):
+                          prediction_g, prediction_t, prediction_i, prediction_d, prediction_na, prediction_nc, prediction_ng, prediction_nt, prediction_ni, prediction_nd, disable_indel_calling=False):
     batch_size = len(batch_chr_pos_seq)
 
     label_shape_cum = 2
@@ -217,10 +253,14 @@ def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center
     batch_probabilities_c = prediction_c[:, :label_shape_cum]
     batch_probabilities_g = prediction_g[:, :label_shape_cum]
     batch_probabilities_t = prediction_t[:, :label_shape_cum]
+    batch_probabilities_i = prediction_i[:, :label_shape_cum] if not disable_indel_calling else None
+    batch_probabilities_d = prediction_d[:, :label_shape_cum] if not disable_indel_calling else None
     batch_probabilities_na = prediction_na[:, :label_shape_cum]
     batch_probabilities_nc = prediction_nc[:, :label_shape_cum]
     batch_probabilities_ng = prediction_ng[:, :label_shape_cum]
     batch_probabilities_nt = prediction_nt[:, :label_shape_cum]
+    batch_probabilities_ni = prediction_ni[:, :label_shape_cum] if not disable_indel_calling else None
+    batch_probabilities_nd = prediction_nd[:, :label_shape_cum] if not disable_indel_calling else None
 
     if len(batch_probabilities_a) != batch_size:
         sys.exit(
@@ -228,51 +268,121 @@ def batch_output(output_file, batch_chr_pos_seq, tumor_alt_info_list, ref_center
             (batch_size, len(batch_probabilities_a))
         )
 
-    for (
-            chr_pos_seq,
-            tumor_alt_info,
-            ref_center,
-            input_forward_acgt_count_ori,
-            input_reverse_acgt_count_ori,
-            probabilities_a,
-            probabilities_c,
-            probabilities_g,
-            probabilities_t,
-            probabilities_na,
-            probabilities_nc,
-            probabilities_ng,
-            probabilities_nt
-    ) in zip(
-        batch_chr_pos_seq,
-        tumor_alt_info_list,
-        ref_center_list,
-        input_list_forward_acgt_count_ori,
-        input_list_reverse_acgt_count_ori,
-        batch_probabilities_a,
-        batch_probabilities_c,
-        batch_probabilities_g,
-        batch_probabilities_t,
-        batch_probabilities_na,
-        batch_probabilities_nc,
-        batch_probabilities_ng,
-        batch_probabilities_nt
-    ):
-        output_with(
-            output_file,
-            chr_pos_seq,
-            tumor_alt_info,
-            ref_center,
-            input_forward_acgt_count_ori,
-            input_reverse_acgt_count_ori,
-            probabilities_a,
-            probabilities_c,
-            probabilities_g,
-            probabilities_t,
-            probabilities_na,
-            probabilities_nc,
-            probabilities_ng,
-            probabilities_nt
-        )
+    if disable_indel_calling:
+        for (
+                chr_pos_seq,
+                tumor_alt_info,
+                ref_center,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                probabilities_a,
+                probabilities_c,
+                probabilities_g,
+                probabilities_t,
+                probabilities_na,
+                probabilities_nc,
+                probabilities_ng,
+                probabilities_nt
+        ) in zip(
+            batch_chr_pos_seq,
+            tumor_alt_info_list,
+            ref_center_list,
+            input_list_forward_acgt_count_ori,
+            input_list_reverse_acgt_count_ori,
+            batch_probabilities_a,
+            batch_probabilities_c,
+            batch_probabilities_g,
+            batch_probabilities_t,
+            batch_probabilities_na,
+            batch_probabilities_nc,
+            batch_probabilities_ng,
+            batch_probabilities_nt
+        ):
+            probabilities_i = None
+            probabilities_d = None
+            probabilities_ni = None
+            probabilities_nd = None
+            output_with(
+                output_file,
+                chr_pos_seq,
+                tumor_alt_info,
+                ref_center,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                probabilities_a,
+                probabilities_c,
+                probabilities_g,
+                probabilities_t,
+                probabilities_i,
+                probabilities_d,
+                probabilities_na,
+                probabilities_nc,
+                probabilities_ng,
+                probabilities_nt,
+                probabilities_ni,
+                probabilities_nd,
+                disable_indel_calling=disable_indel_calling
+            )
+
+    else:
+        for (
+                chr_pos_seq,
+                tumor_alt_info,
+                ref_center,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                probabilities_a,
+                probabilities_c,
+                probabilities_g,
+                probabilities_t,
+                probabilities_i,
+                probabilities_d,
+                probabilities_na,
+                probabilities_nc,
+                probabilities_ng,
+                probabilities_nt,
+                probabilities_ni,
+                probabilities_nd
+        ) in zip(
+            batch_chr_pos_seq,
+            tumor_alt_info_list,
+            ref_center_list,
+            input_list_forward_acgt_count_ori,
+            input_list_reverse_acgt_count_ori,
+            batch_probabilities_a,
+            batch_probabilities_c,
+            batch_probabilities_g,
+            batch_probabilities_t,
+            batch_probabilities_i,
+            batch_probabilities_d,
+            batch_probabilities_na,
+            batch_probabilities_nc,
+            batch_probabilities_ng,
+            batch_probabilities_nt,
+            batch_probabilities_ni,
+            batch_probabilities_nd
+        ):
+            output_with(
+                output_file,
+                chr_pos_seq,
+                tumor_alt_info,
+                ref_center,
+                input_forward_acgt_count_ori,
+                input_reverse_acgt_count_ori,
+                probabilities_a,
+                probabilities_c,
+                probabilities_g,
+                probabilities_t,
+                probabilities_i,
+                probabilities_d,
+                probabilities_na,
+                probabilities_nc,
+                probabilities_ng,
+                probabilities_nt,
+                probabilities_ni,
+                probabilities_nd,
+                disable_indel_calling=disable_indel_calling
+            )
 
 
 def output_with(
@@ -286,10 +396,15 @@ def output_with(
         probabilities_c,
         probabilities_g,
         probabilities_t,
+        probabilities_i,
+        probabilities_d,
         probabilities_na,
         probabilities_nc,
         probabilities_ng,
-        probabilities_nt
+        probabilities_nt,
+        probabilities_ni,
+        probabilities_nd,
+        disable_indel_calling=False
 ):
     if type(chr_pos_seq) == np.ndarray:
         chr_pos_seq = chr_pos_seq[0].decode()
@@ -312,11 +427,16 @@ def output_with(
         probabilities_c,
         probabilities_g,
         probabilities_t,
+        probabilities_i,
+        probabilities_d,
         probabilities_na,
         probabilities_nc,
         probabilities_ng,
         probabilities_nt,
-        ""
+        probabilities_ni,
+        probabilities_nd,
+        "",
+        disable_indel_calling=disable_indel_calling
     )
 
 
@@ -339,7 +459,7 @@ def predict(args):
         is_show_reference=args.show_ref,
         quality_score_for_pass=args.qual,
         pileup=args.pileup,
-        enable_indel_calling=args.enable_indel_calling
+        disable_indel_calling=args.disable_indel_calling
     )
 
     param.flankingBaseNum = param.flankingBaseNum if args.flanking is None else args.flanking
@@ -391,14 +511,66 @@ def predict(args):
     global test_pos
     test_pos = None
 
-    model_p = torch.load(chkpnt_fn_acgt, map_location=torch.device(device))
-    model_acgt = model_p['model_acgt']
+    if args.disable_indel_calling:
+        model_acgt = torch.load(chkpnt_fn_acgt, map_location=torch.device(device))
+        model_aff = model_acgt['model_acgt']
 
-    model_r = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device))
-    model_nacgt = model_r['model_nacgt']
+        model_nacgt = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device))
+        model_neg = model_nacgt['model_nacgt']
 
-    model_acgt.eval()
-    model_nacgt.eval()
+    else:
+        model_aff = CvT_Indel(
+                num_classes=2,
+                s1_emb_dim=16,  # stage 1 - dimension
+                s1_emb_kernel=3,  # stage 1 - conv kernel
+                s1_emb_stride=2,  # stage 1 - conv stride
+                s1_proj_kernel=3,  # stage 1 - attention ds-conv kernel size
+                s1_kv_proj_stride=2,  # stage 1 - attention key / value projection stride
+                s1_heads=1,  # stage 1 - heads
+                s1_depth=1,  # stage 1 - depth
+                s1_mlp_mult=4,  # stage 1 - feedforward expansion factor
+                s2_emb_dim=64,  # stage 2 - (same as above)
+                s2_emb_kernel=3,
+                s2_emb_stride=2,
+                s2_proj_kernel=3,
+                s2_kv_proj_stride=2,
+                s2_heads=3,
+                s2_depth=2,
+                s2_mlp_mult=4,
+                s3_emb_dim=128,  # stage 3 - (same as above)
+                s3_emb_kernel=3,
+                s3_emb_stride=2,
+                s3_proj_kernel=3,
+                s3_kv_proj_stride=2,
+                s3_heads=4,
+                s3_depth=3,
+                s3_mlp_mult=4,
+                dropout=0.,
+                dropout_fc=0.3,
+                depth=1,
+                width=param.no_of_positions,
+                dim=param.pileup_channel_size,
+                apply_softmax=False,
+                model_type="acgt"
+            )
+
+        model_acgt_saved = torch.load(chkpnt_fn_acgt, map_location=torch.device(device))
+        model_aff_saved = model_acgt_saved['model_acgt']
+        model_aff_state_dict = model_aff_saved.state_dict()
+        model_aff.load_state_dict(model_aff_state_dict)
+
+        model_neg = BiGRU_NACGT_Indel(apply_softmax=False,
+                                 num_classes=2,
+                                 channel_size=param.pileup_channel_size,
+                                 model_type="nacgt")
+
+        model_nacgt_saved = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device))
+        model_neg_saved = model_nacgt_saved['model_nacgt']
+        model_neg_state_dict = model_neg_saved.state_dict()
+        model_neg.load_state_dict(model_neg_state_dict)
+
+    model_aff.eval()
+    model_neg.eval()
 
     total = 0
     softmax = torch.nn.Softmax(dim=1)
@@ -472,8 +644,20 @@ def predict(args):
                                                                input_matrix_reverse_acgt_count_ori)).tolist()
 
                 with torch.no_grad():
-                    prediction_a, prediction_c, prediction_g, prediction_t = model_acgt(input_matrix_acgt)
-                    prediction_na, prediction_nc, prediction_ng, prediction_nt = model_nacgt(input_matrix_nacgt)
+                    if args.disable_indel_calling:
+                        prediction_a, prediction_c, prediction_g, prediction_t = model_aff(
+                            input_matrix_acgt)
+                        prediction_na, prediction_nc, prediction_ng, prediction_nt = model_neg(
+                            input_matrix_nacgt)
+                        prediction_i = None
+                        prediction_d = None
+                        prediction_ni = None
+                        prediction_nd = None
+                    else:
+                        prediction_a, prediction_c, prediction_g, prediction_t, prediction_i, prediction_d = model_aff(
+                            input_matrix_acgt)
+                        prediction_na, prediction_nc, prediction_ng, prediction_nt, prediction_ni, prediction_nd = model_neg(
+                            input_matrix_nacgt)
                 prediction_a = softmax(prediction_a)
                 prediction_a = prediction_a.cpu().numpy()
                 prediction_c = softmax(prediction_c)
@@ -482,6 +666,11 @@ def predict(args):
                 prediction_g = prediction_g.cpu().numpy()
                 prediction_t = softmax(prediction_t)
                 prediction_t = prediction_t.cpu().numpy()
+                if not args.disable_indel_calling:
+                    prediction_i = softmax(prediction_i)
+                    prediction_i = prediction_i.cpu().numpy()
+                    prediction_d = softmax(prediction_d)
+                    prediction_d = prediction_d.cpu().numpy()
                 prediction_na = softmax(prediction_na)
                 prediction_na = prediction_na.cpu().numpy()
                 prediction_nc = softmax(prediction_nc)
@@ -490,12 +679,17 @@ def predict(args):
                 prediction_ng = prediction_ng.cpu().numpy()
                 prediction_nt = softmax(prediction_nt)
                 prediction_nt = prediction_nt.cpu().numpy()
+                if not args.disable_indel_calling:
+                    prediction_ni = softmax(prediction_ni)
+                    prediction_ni = prediction_ni.cpu().numpy()
+                    prediction_nd = softmax(prediction_nd)
+                    prediction_nd = prediction_nd.cpu().numpy()
 
                 total += len(input_tensor_acgt)
                 thread_pool.append(Thread(
                     target=batch_output,
                     args=(output_file, position, tumor_alt_info_list, ref_center_list, input_list_forward_acgt_count_ori, input_list_reverse_acgt_count_ori, prediction_a, prediction_c,
-                          prediction_g, prediction_t, prediction_na, prediction_nc, prediction_ng, prediction_nt)
+                          prediction_g, prediction_t, prediction_i, prediction_d, prediction_na, prediction_nc, prediction_ng, prediction_nt, prediction_ni, prediction_nd, args.disable_indel_calling)
                 ))
 
             if not is_finish_loaded_all_mini_batches:
@@ -585,8 +779,8 @@ def main():
     parser.add_argument('--min_rescale_cov', type=int, default=param.min_rescale_cov,
                         help="EXPERIMENTAL: Minimum coverage after rescalling from excessively high coverage data")
 
-    parser.add_argument('--enable_indel_calling', type=str2bool, default=0,
-                        help="EXPERIMENTAL: Call Indel variants, default: disabled")
+    parser.add_argument('--disable_indel_calling', type=str2bool, default=0,
+                        help="EXPERIMENTAL: Disable Indel calling, default: enabled.")
 
     # options for debug purpose
     parser.add_argument('--predict_fn', type=str, default="PIPE",
