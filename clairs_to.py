@@ -50,9 +50,11 @@ data_preprocess_folder = [
     "nonsomatic_tagging",
     'realign_reads',
     'realign_variants',
+    'postfilter_variants',
     "haplotype_filtering",
     'cal_af_distribution',
     "compare_vcf",
+    "select_hetero_snp_for_phasing"
 ]
 
 
