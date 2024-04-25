@@ -39,7 +39,7 @@ REF="GRCh38_no_alt_chr17.fa"
 TUMOR_BAM="HCC1395_tumor_chr17_demo.bam"
 BASELINE_VCF_FILE_PATH="SEQC2_high-confidence_sSNV_in_HC_regions_v1.2_chr17.vcf.gz"
 BASELINE_BED_FILE_PATH="SEQC2_High-Confidence_Regions_v1.2_chr17.bed"
-OUTPUT_VCF_FILE_PATH="output.vcf.gz"
+OUTPUT_SNV_VCF_FILE_PATH="snv.vcf.gz"
 
 ```
 
@@ -68,7 +68,7 @@ docker run -it \
   hkubal/clairs-to:latest \
   python3 /opt/bin/clairs_to.py compare_vcf \
      --truth_vcf_fn ${INPUT_DIR}/${BASELINE_VCF_FILE_PATH} \
-     --input_vcf_fn ${OUTPUT_DIR}/${OUTPUT_VCF_FILE_PATH} \
+     --input_vcf_fn ${OUTPUT_DIR}/${OUTPUT_SNV_VCF_FILE_PATH} \
      --bed_fn ${INPUT_DIR}/${BASELINE_BED_FILE_PATH} \
      --output_dir ${OUTPUT_DIR}/benchmark \
      --input_filter_tag 'PASS' \
@@ -94,7 +94,7 @@ docker run \
 -v "${OUTPUT_DIR}":"${OUTPUT_DIR}" \
 jmcdani20/hap.py:v0.3.12 /opt/hap.py/bin/som.py \
     ${INPUT_DIR}/${BASELINE_VCF_FILE_PATH} \
-    ${OUTPUT_DIR}/${OUTPUT_VCF_FILE_PATH} \
+    ${OUTPUT_DIR}/${OUTPUT_SNV_VCF_FILE_PATH} \
     -T ${INPUT_DIR}/quick_demo.bed \
     -f ${INPUT_DIR}/${BASELINE_BED_FILE_PATH} \
     -r ${INPUT_DIR}/${REF} \
