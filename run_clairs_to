@@ -64,6 +64,7 @@ OutputPath = namedtuple('OutputPath', [
     'log_path',
     'tmp_file_path',
     'split_bed_path',
+    'split_indel_bed_path',
     'candidates_path',
     'pileup_tensor_can_affirmative_path',
     'pileup_tensor_can_negational_path',
@@ -102,6 +103,7 @@ def create_output_folder(args):
     log_path = folder_path_from(os.path.join(args.output_dir, 'logs'), create_not_found=True)
     tmp_file_path = folder_path_from(os.path.join(args.output_dir, 'tmp'), create_not_found=True)
     split_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_beds'), create_not_found=True)
+    split_indel_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_indel_beds'), create_not_found=True) if not args.disable_indel_calling else None
     candidates_path = folder_path_from(os.path.join(tmp_file_path, 'candidates'), create_not_found=True)
     pileup_tensor_can_affirmative_path = folder_path_from(os.path.join(tmp_file_path, 'pileup_tensor_can_affirmative'),
                                                           create_not_found=True)
@@ -109,9 +111,15 @@ def create_output_folder(args):
                                                          create_not_found=True)
     vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'vcf_output'), create_not_found=True)
 
+    if args.platform != 'ilmn':
+        phasing_log_path = folder_path_from(os.path.join(args.output_dir, 'logs', 'phasing_log'), create_not_found=True)
+        phasing_phased_vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'phasing_output/phased_vcf_output'), create_not_found=True)
+        phasing_phased_bam_output_path = folder_path_from(os.path.join(tmp_file_path, 'phasing_output/phased_bam_output'), create_not_found=True)
+
     output_path = OutputPath(log_path=log_path,
                              tmp_file_path=tmp_file_path,
                              split_bed_path=split_bed_path,
+                             split_indel_bed_path=split_indel_bed_path,
                              candidates_path=candidates_path,
                              pileup_tensor_can_affirmative_path=pileup_tensor_can_affirmative_path,
                              pileup_tensor_can_negational_path=pileup_tensor_can_negational_path,
@@ -164,6 +172,7 @@ def check_tools_version(args):
         'python': version_parse('3.9.0'),
         'pypy': version_parse('3.6'),
         'samtools': version_parse('1.10'),
+        'whatshap': version_parse('1.0'),
         'parallel': version_parse('20191122'),
     }
 
@@ -208,8 +217,7 @@ def check_contig_in_bam(bam_fn, sorted_contig_list, samtools, allow_none=False, 
     for contig_name in sorted_contig_list:
         if contig_name not in contig_with_read_support_set:
             logging(log_warning(
-                "[WARNING] Contig name {} provided but no mapped reads found in {} BAM, skip!".format(flag,
-                                                                                                      contig_name)))
+                "[WARNING] Contig name {} provided but no mapped reads found in {} BAM, skip!".format(contig_name, flag)))
     filtered_sorted_contig_list = [item for item in sorted_contig_list if item in contig_with_read_support_set]
 
     found_contig = True
@@ -257,7 +265,7 @@ def split_extend_vcf(genotyping_mode_vcf_fn, output_fn):
         if ctg_start < 0:
             sys.exit(
                 log_error(
-                    "[ERROR] Invalid VCF input at the {}-th row {} {} {}".format(row_id + 1, ctg_name, center_pos)))
+                    "[ERROR] Invalid VCF input at the {}-th row {} {}".format(row_id + 1, ctg_name, center_pos)))
         if ctg_start - expand_region_size < 0:
             continue
         expand_ctg_start = ctg_start - expand_region_size
@@ -279,8 +287,10 @@ def split_extend_vcf(genotyping_mode_vcf_fn, output_fn):
     return know_vcf_contig_set
 
 
-def split_extend_bed(bed_fn, output_fn, contig_set=None):
+def split_extend_bed(bed_fn, output_fn, contig_set=None, expand_region=True):
     expand_region_size = param.no_of_positions
+    if not expand_region:
+        expand_region_size = 0
     output_ctg_dict = defaultdict(list)
     unzip_process = subprocess_popen(shlex.split("gzip -fdc %s" % (bed_fn)))
     for row_id, row in enumerate(unzip_process.stdout):
@@ -331,6 +341,7 @@ def check_contigs_intersection(args, fai_fn):
     MAX_CHUNK_LENGTH = 20000000
     is_include_all_contigs = args.include_all_ctgs
     is_bed_file_provided = args.bed_fn is not None or args.region is not None
+    is_indel_bed_file_provided = args.call_indels_only_in_these_regions is not None
     is_known_vcf_file_provided = args.genotyping_mode_vcf_fn is not None
     is_ctg_name_list_provided = args.ctg_name is not None
 
@@ -338,6 +349,7 @@ def check_contigs_intersection(args, fai_fn):
         args.bed_fn = write_region_bed(args.region)
 
     split_bed_path = os.path.join(args.output_dir, 'tmp', 'split_beds')
+    split_indel_bed_path = os.path.join(args.output_dir, 'tmp', 'split_indel_beds') if not args.disable_indel_calling else None
     tree = bed_tree_from(bed_file_path=args.bed_fn, region=args.region)
     know_vcf_contig_set = split_extend_vcf(genotyping_mode_vcf_fn=args.genotyping_mode_vcf_fn,
                                            output_fn=split_bed_path) if is_known_vcf_file_provided else set()
@@ -405,7 +417,6 @@ def check_contigs_intersection(args, fai_fn):
 
     sorted_contig_list = sorted(list(contig_set), key=lambda x: contigs_order.index(x))
 
-    found_contig = True
     if not len(contig_set):
         if is_bed_file_provided:
             all_contig_in_bed = ' '.join(list(tree.keys()))
@@ -460,6 +471,9 @@ def check_contigs_intersection(args, fai_fn):
     if is_bed_file_provided:
         split_extend_bed(bed_fn=args.bed_fn, output_fn=split_bed_path, contig_set=contig_set)
 
+    if not args.disable_indel_calling and is_indel_bed_file_provided:
+        split_extend_bed(bed_fn=args.call_indels_only_in_these_regions, output_fn=split_indel_bed_path, contig_set=contig_set, expand_region=False)
+
     contig_path = os.path.join(args.output_dir, 'tmp', 'CONTIGS')
     with open(contig_path, 'w') as output_file:
         output_file.write('\n'.join(sorted_contig_list))
@@ -469,7 +483,6 @@ def check_contigs_intersection(args, fai_fn):
     with open(chunk_list_path, 'w') as output_file:
         for contig_name in sorted_contig_list:
             chunk_num = contig_chunk_num[contig_name] if args.chunk_num is None else args.chunk_num
-            # chunk_num = 30
             for chunk_id in range(1, chunk_num + 1):
                 output_file.write(contig_name + ' ' + str(chunk_id) + ' ' + str(chunk_num) + '\n')
                 chunk_list.append((contig_name, chunk_id, chunk_num))
@@ -515,74 +528,148 @@ def check_args(args):
                 args.tumor_bam_fn + '.bai',
                 args.tumor_bam_fn + '.crai')))
 
+    if not args.disable_indel_calling and args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz',
+                             'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz',
+                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn',
+                             'hifi_revio'}:
+        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ilmn', and 'hifi_revio' platform"))
+
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
 
-    if args.pileup_affirmative_model_path is None:
+    if args.snv_pileup_affirmative_model_path is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_guppy_sup_4khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_dorado_sup_5khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_dorado_sup_4khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_dorado_hac_4khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_dorado_hac_4khz', 'pileup_affirmative.pkl')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_guppy_hac_5khz', 'pileup_affirmative.pkl')
         else:
-            args.pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               args.platform, 'pileup_affirmative.pkl')
 
-    if args.pileup_negational_model_path is None:
+    if args.snv_pileup_negational_model_path is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_guppy_sup_4khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_dorado_sup_5khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_dorado_sup_4khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_dorado_hac_4khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_dorado_hac_4khz', 'pileup_negational.pkl')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_guppy_hac_5khz', 'pileup_negational.pkl')
         else:
-            args.pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              args.platform, 'pileup_negational.pkl')
 
-    args.pileup_affirmative_model_path = file_path_from(file_name=args.pileup_affirmative_model_path,
+    args.snv_pileup_affirmative_model_path = file_path_from(file_name=args.snv_pileup_affirmative_model_path,
                                                         exit_on_not_found=True, is_directory=False, allow_none=False)
 
-    args.pileup_negational_model_path = file_path_from(file_name=args.pileup_negational_model_path,
+    args.snv_pileup_negational_model_path = file_path_from(file_name=args.snv_pileup_negational_model_path,
                                                        exit_on_not_found=True, is_directory=False, allow_none=False)
 
-    if args.likelihood_matrix_data is None:
+    if args.snv_likelihood_matrix_data is None:
         if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_guppy_sup_4khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_dorado_sup_5khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_dorado_sup_4khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_dorado_hac_4khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_dorado_hac_4khz', 'likelihood_matrix.txt')
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_guppy_hac_5khz', 'likelihood_matrix.txt')
         else:
-            args.likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
                                                        'likelihood_matrix.txt')
+
+    if not args.disable_indel_calling:
+        if args.indel_pileup_affirmative_model_path is None:
+            if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_guppy_sup_4khz', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_sup_5khz', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_sup_4khz', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ont_r10_dorado_hac_4khz':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_hac_4khz', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_guppy_hac_5khz', 'indel', 'pileup_affirmative.pkl')
+            else:
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  args.platform, 'indel', 'pileup_affirmative.pkl')
+
+        if args.indel_pileup_negational_model_path is None:
+            if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_guppy_sup_4khz', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_sup_5khz', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_sup_4khz', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ont_r10_dorado_hac_4khz':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_dorado_hac_4khz', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ont_r10_guppy_hac_5khz', 'indel', 'pileup_negational.pkl')
+            else:
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  args.platform, 'indel', 'pileup_negational.pkl')
+
+        args.indel_pileup_affirmative_model_path = file_path_from(file_name=args.indel_pileup_affirmative_model_path, exit_on_not_found=True,
+                                                is_directory=False, allow_none=False)
+
+        args.indel_pileup_negational_model_path = file_path_from(file_name=args.indel_pileup_negational_model_path,
+                                                                  exit_on_not_found=True,
+                                                                  is_directory=False, allow_none=False)
+
+        if args.indel_likelihood_matrix_data is None:
+            if args.platform == 'ont_r10_guppy_sup_4khz' or args.platform == 'ont_r10_guppy_4khz' or args.platform == 'ont_r10_guppy':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ont_r10_guppy_sup_4khz', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'ont_r10_dorado_sup_5khz' or args.platform == 'ont_r10_dorado_5khz':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ont_r10_dorado_sup_5khz', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'ont_r10_dorado_sup_4khz' or args.platform == 'ont_r10_dorado_4khz':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ont_r10_dorado_sup_4khz', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'ont_r10_dorado_hac_4khz':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ont_r10_dorado_hac_4khz', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ont_r10_guppy_hac_5khz', 'indel', 'likelihood_matrix.txt')
+            else:
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
+                                                           'indel', 'likelihood_matrix.txt')
 
     default_gnomad_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases',
                                            'gnomad.r2.1.af-ge-0.001.sites.vcf.gz')
@@ -596,6 +683,15 @@ def check_args(args):
                                             is_directory=False, allow_none=True)
     default_1kgpon_resource = file_path_from(file_name=default_1kgpon_resource, exit_on_not_found=True,
                                              is_directory=False, allow_none=True)
+
+    default_indel_bed_resource = os.path.join(args.conda_prefix, 'bin', 'clairs-to_databases', 'GRCh38Chr1-22XY_excludedGIABStratifV3.3AllDifficultRegions_includedCMRGv1.0.bed')
+
+    if args.bed_fn is not None and args.call_indels_only_in_these_regions is not None:
+        logging(log_warning(
+            "[WARNING] `--bed_fn` will supersede `--call_indels_only_in_these_regions`."))
+    if args.call_indels_only_in_these_regions is None:
+        args.call_indels_only_in_these_regions = file_path_from(file_name=default_indel_bed_resource, exit_on_not_found=True,
+                                                 is_directory=False, allow_none=True)
 
     if args.panel_of_normals is not None:
         if args.panel_of_normals == 'None' or args.panel_of_normals == 'Null' or args.panel_of_normals == ' ':
@@ -615,15 +711,39 @@ def check_args(args):
                 logging(log_warning(
                     "[INFO] Default {} PoN is not included!".format(str(default_1kgpon_resource))))
             args.panel_of_normals = args.panel_of_normals
+            if args.panel_of_normals_require_allele_matching is not None:
+                ori_panel_of_normals_require_allele_matching_list = list(args.panel_of_normals_require_allele_matching.split(','))
+                if len(panel_of_normals_list) != len(ori_panel_of_normals_require_allele_matching_list):
+                    logging(log_warning(
+                        "[WARNING] Please use `--panel_of_normals_require_allele_matching` together with `--panel_of_normals`."))
+                if args.panel_of_normals_require_allele_matching == 'None' or args.panel_of_normals_require_allele_matching == 'Null' or args.panel_of_normals_require_allele_matching == ' ':
+                    panel_of_normals_require_allele_matching_list = ['True'] * len(panel_of_normals_list)
+                    args.panel_of_normals_require_allele_matching = ','.join(panel_of_normals_require_allele_matching_list)
+                else:
+                    args.panel_of_normals_require_allele_matching = args.panel_of_normals_require_allele_matching
+            else:
+                panel_of_normals_require_allele_matching_list = ['True'] * len(panel_of_normals_list)
+                args.panel_of_normals_require_allele_matching = ','.join(panel_of_normals_require_allele_matching_list)
     else:
         args.panel_of_normals = str(default_gnomad_resource) + ',' + str(default_dbsnp_resource) + ',' + str(
             default_1kgpon_resource)
+        args.panel_of_normals_require_allele_matching = 'True' + ',' + 'True' + ',' + 'False'
+
+    if args.whatshap is None:
+        args.whatshap = os.path.join(args.conda_prefix, 'bin', 'whatshap')
+    if args.longphase is None:
+        args.longphase = os.path.join(args.conda_prefix, 'bin', 'longphase')
+    args.use_longphase_for_intermediate_phasing = False if args.use_whatshap_for_intermediate_phasing is True else True
+    if args.use_longphase_for_intermediate_phasing and not os.path.exists(args.longphase):
+        sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
+    if args.use_whatshap_for_intermediate_phasing and not os.path.exists(args.whatshap):
+        sys.exit(log_error("[ERROR] Cannot find whatshap at {}".format(args.whatshap)))
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
     if args.indel_min_af is None:
-        if args.enable_indel_calling:
-            args.indel_min_af = 0.05
+        if not args.disable_indel_calling:
+            args.indel_min_af = param.indel_min_af
         else:
             args.indel_min_af = 1.0
     if args.min_coverage is None:
@@ -642,26 +762,45 @@ def check_args(args):
             '[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}'))
 
     if args.qual is None:
-        if args.prefer_balance:
-            args.qual = param.best_thred_qual[args.platform] if args.platform in param.best_thred_qual else \
-            param.best_thred_qual['ont']
-        else:
-            # default we enable min_thred_qual
-            args.qual = param.min_thred_qual[args.platform] if args.platform in param.min_thred_qual else \
-            param.min_thred_qual['ont']
+        args.qual = param.min_thred_qual[args.platform] if args.platform in param.min_thred_qual else \
+        param.min_thred_qual['ont']
+        if args.qual_cutoff_phaseable_region is None:
+            args.qual_cutoff_phaseable_region = param.min_phaseable_thred_qual[
+                args.platform] if args.platform in param.min_phaseable_thred_qual else \
+                param.min_phaseable_thred_qual['ont']
+        if args.qual_cutoff_unphaseable_region is None:
+            args.qual_cutoff_unphaseable_region = param.min_unphaseable_thred_qual[
+                args.platform] if args.platform in param.min_unphaseable_thred_qual else \
+                param.min_unphaseable_thred_qual['ont']
+    else:
+        if args.qual_cutoff_phaseable_region is not None or args.qual_cutoff_unphaseable_region is not None:
+            logging(log_warning(
+                "[WARNING] `--qual` will supersede `--qual_cutoff_phaseable_region` and `--qual_cutoff_unphaseable_region`."))
+        args.qual_cutoff_phaseable_region = args.qual
+        args.qual_cutoff_unphaseable_region = args.qual
     if args.skip_steps is not None:
         check_skip_steps_legal(args)
-    if args.enable_realignment and args.platform != 'ilmn':
-        args.enable_realignment = False
+
+    if args.disable_intermediate_phasing:
+        args.phase_tumor = False
+    if args.phase_tumor is None:
+        if args.genotyping_mode_vcf_fn is not None:
+            logging(log_warning(
+                "[WARNING] HET SNPs based phasing is disabled if `--genotyping_mode_vcf_fn` is provided, add `--phase_tumor True` if phasing the tumor is still needed. Please ensure you have sufficient heterozygous variant candidates given in the --genotyping_mode_vcf_fn file, otherwise the phasing step might lead to worse performance."))
+        else:
+            args.phase_tumor = True if args.platform != 'ilmn' else False
 
     if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
         logging(log_warning(
-            "[INFO] Enable --print_ref_calls option and disable --disable_print_nonsomatic_calls in genotyping mode!"))
+            "[INFO] Enable --print_ref_calls option and disable --do_not_print_nonsomatic_calls in genotyping mode!"))
         args.print_ref_calls = True
-        args.disable_print_nonsomatic_calls = False
+        args.do_not_print_nonsomatic_calls = False
+        args.disable_indel_calling = True
 
     legal_range_from(param_name="threads", x=args.threads, min_num=1, exit_out_of_range=True)
     legal_range_from(param_name="qual", x=args.qual, min_num=0, exit_out_of_range=True)
+    legal_range_from(param_name="qual_cutoff_phaseable_region", x=args.qual_cutoff_phaseable_region, min_num=0, exit_out_of_range=True)
+    legal_range_from(param_name="qual_cutoff_unphaseable_region", x=args.qual_cutoff_unphaseable_region, min_num=0, exit_out_of_range=True)
     legal_range_from(param_name="min_coverage", x=args.min_coverage, min_num=0, exit_out_of_range=True)
     legal_range_from(param_name="min_bq", x=args.min_bq, min_num=0, exit_out_of_range=True)
     legal_range_from(param_name="snv_min_af", x=args.snv_min_af, min_num=0, max_num=1, exit_out_of_range=True)
@@ -685,28 +824,41 @@ def print_args(args):
     logging("[INFO] PLATFORM: {}".format(args.platform))
     logging("[INFO] THREADS: {}".format(args.threads))
     logging("[INFO] OUTPUT FOLDER: {}".format(args.output_dir))
-    logging("[INFO] OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.output_prefix + '.vcf.gz')))
-    logging("[INFO] PILEUP AFFIRMATIVE MODEL PATH: {}".format(args.pileup_affirmative_model_path))
-    logging("[INFO] PILEUP NEGATIONAL MODEL PATH: {}".format(args.pileup_negational_model_path))
+    logging("[INFO] SNV OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.snv_output_prefix + '.vcf.gz')))
+    logging("[INFO] INDEL OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.indel_output_prefix + '.vcf.gz')))
+    logging("[INFO] SNV MINIMUM AF: {}".format(args.snv_min_af))
+    logging("[INFO] INDEL MINIMUM AF: {}".format(args.indel_min_af))
+    logging("[INFO] SNV PILEUP AFFIRMATIVE MODEL PATH: {}".format(args.snv_pileup_affirmative_model_path))
+    logging("[INFO] SNV PILEUP NEGATIONAL MODEL PATH: {}".format(args.snv_pileup_negational_model_path))
+    logging("[INFO] INDEL PILEUP AFFIRMATIVE MODEL PATH: {}".format(args.indel_pileup_affirmative_model_path))
+    logging("[INFO] INDEL PILEUP NEGATIONAL MODEL PATH: {}".format(args.indel_pileup_negational_model_path))
     logging("[INFO] BED FILE PATH: {}".format(args.bed_fn))
+    logging("[INFO] SPECIFIED REGION FOR CALLING: {}".format(args.region))
+    logging("[INFO] REGIONS FOR INDEL CALLING:: {}".format(args.call_indels_only_in_these_regions))
+    logging("[INFO] CONTIGS FOR CALLING: {}".format(args.ctg_name))
+    logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
     logging("[INFO] GENOTYPING MODE VCF FILE PATH: {}".format(args.genotyping_mode_vcf_fn))
     logging("[INFO] HYBRID MODE VCF FILE PATH: {}".format(args.hybrid_mode_vcf_fn))
-    logging("[INFO] REGION FOR CALLING: {}".format(args.region))
-    logging("[INFO] CONTIGS FOR CALLING: {}".format(args.ctg_name))
+    logging("[INFO] PANEL OF NORMALS: {}".format(args.panel_of_normals))
+    logging("[INFO] PANEL OF NORMALS REQUIRE ALLELE MATCHING: {}".format(args.panel_of_normals_require_allele_matching))
+    logging("[INFO] CHUNK SIZE: {}".format(args.chunk_size))
     logging("[INFO] CONDA BINARY PREFIX: {}".format(args.conda_prefix))
     logging("[INFO] SAMTOOLS BINARY PATH: {}".format(args.samtools))
     logging("[INFO] PYTHON BINARY PATH: {}".format(args.python))
     logging("[INFO] PYPY BINARY PATH: {}".format(args.pypy))
     logging("[INFO] PARALLEL BINARY PATH: {}".format(args.parallel))
-    logging("[INFO] CHUNK SIZE: {}".format(args.chunk_size))
-    logging("[INFO] SNV MINIMUM AF: {}".format(args.snv_min_af))
+    logging("[INFO] LONGPHASE BINARY PATH: {}".format(args.longphase))
+    logging("[INFO] WHATSHAP BINARY PATH: {}".format(args.whatshap))
     logging("[INFO] ENABLE DRY RUN: {}".format(args.dry_run))
-    logging("[INFO] ENABLE PRINTING REFERENCE CALLS: {}".format(args.print_ref_calls))
-    logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
     logging("[INFO] ENABLE REMOVING INTERMEDIATE FILES: {}".format(args.remove_intermediate_dir))
+    logging("[INFO] DISABLE INTERMEDIATE PHASING: {}".format(args.disable_intermediate_phasing))
+    logging("[INFO] DISABLE INDEL CALLING: {}".format(args.disable_indel_calling))
+    logging("[INFO] ENABLE PRINTING REFERENCE CALLS: {}".format(args.print_ref_calls))
+    logging("[INFO] ENABLE APPLYING REALIGNMENT: {}".format(args.enable_realignment))
+    logging("[INFO] ENABLE APPLYING POSTFILTERING: {}".format(args.enable_postfilter))
+    logging("[INFO] ENABLE APPLYING HAPLOTYPE FILTERING: {}".format(args.apply_haplotype_filtering))
     logging("[INFO] DISABLE APPLYING NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
-    logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS: {}".format(args.disable_print_nonsomatic_calls))
-    logging("[INFO] PANEL OF NORMALS: {}".format(args.panel_of_normals))
+    logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS: {}".format(args.do_not_print_nonsomatic_calls))
     logging("")
 
     if args.platform.startswith('ont'):
@@ -730,45 +882,64 @@ def print_command_line(args):
         cmdline += '--threads {} '.format(args.threads)
         cmdline += '--platform {} '.format(args.platform)
         cmdline += '--output_dir {} '.format(args.output_dir)
-        cmdline += '--pileup_affirmative_model_path {} '.format(
-            args.pileup_affirmative_model_path) if args.pileup_affirmative_model_path is not None else ""
-        cmdline += '--pileup_negational_model_path {} '.format(
-            args.pileup_negational_model_path) if args.pileup_negational_model_path is not None else ""
+        cmdline += '--snv_output_prefix {} '.format(args.snv_output_prefix) if args.snv_output_prefix != "snv" else ""
+        cmdline += '--indel_output_prefix {} '.format(
+            args.indel_output_prefix) if args.indel_output_prefix != "indel" else ""
+        cmdline += '--sample_name {} '.format(args.sample_name) if args.sample_name != "SAMPLE" else ""
         cmdline += '--ctg_name {} '.format(args.ctg_name) if args.ctg_name is not None else ""
+        cmdline += '--include_all_ctgs ' if args.include_all_ctgs else ""
         cmdline += '--region {} '.format(args.region) if args.region is not None else ""
         cmdline += '--bed_fn {} '.format(args.bed_fn) if args.bed_fn is not None else ""
+        cmdline += '--call_indels_only_in_these_regions {} '.format(args.call_indels_only_in_these_regions) if args.call_indels_only_in_these_regions is not None else ""
         cmdline += '--genotyping_mode_vcf_fn {} '.format(
             args.genotyping_mode_vcf_fn) if args.genotyping_mode_vcf_fn is not None else ""
         cmdline += '--hybrid_mode_vcf_fn {} '.format(
             args.hybrid_mode_vcf_fn) if args.hybrid_mode_vcf_fn is not None else ""
         cmdline += '--qual {} '.format(args.qual) if args.qual is not None else ""
+        cmdline += '--qual_cutoff_phaseable_region {} '.format(args.qual_cutoff_phaseable_region) if args.qual_cutoff_phaseable_region is not None else ""
+        cmdline += '--qual_cutoff_unphaseable_region {} '.format(args.qual_cutoff_unphaseable_region) if args.qual_cutoff_unphaseable_region is not None else ""
         cmdline += '--snv_min_af {} '.format(args.snv_min_af) if args.snv_min_af is not None else ""
+        cmdline += '--indel_min_af {} '.format(args.indel_min_af) if args.indel_min_af is not None else ""
         cmdline += '--min_coverage {} '.format(args.min_coverage) if args.min_coverage is not None else ""
         cmdline += '--min_bq {} '.format(args.min_bq) if args.min_bq is not None else ""
         cmdline += '--chunk_size {} '.format(args.chunk_size) if args.chunk_size is not None else ""
-        cmdline += '--sample_name {} '.format(args.sample_name) if args.sample_name != "SAMPLE" else ""
-        cmdline += '--output_prefix {} '.format(args.output_prefix) if args.output_prefix != "output" else ""
+        cmdline += '--dry_run ' if args.dry_run else ""
         cmdline += '--remove_intermediate_dir ' if args.remove_intermediate_dir else ""
-        cmdline += '--include_all_ctgs ' if args.include_all_ctgs else ""
-        cmdline += '--print_ref_calls ' if args.print_ref_calls else ""
+        cmdline += '--panel_of_normals {} '.format(args.panel_of_normals) if args.panel_of_normals is not None else ""
+        cmdline += '--panel_of_normals_require_allele_matching {} '.format(args.panel_of_normals_require_allele_matching) if args.panel_of_normals_require_allele_matching is not None else ""
+        cmdline += '--snv_pileup_affirmative_model_path {} '.format(
+            args.snv_pileup_affirmative_model_path) if args.snv_pileup_affirmative_model_path is not None else ""
+        cmdline += '--snv_pileup_negational_model_path {} '.format(
+            args.snv_pileup_negational_model_path) if args.snv_pileup_negational_model_path is not None else ""
+        cmdline += '--indel_pileup_affirmative_model_path {} '.format(
+            args.indel_pileup_affirmative_model_path) if args.indel_pileup_affirmative_model_path is not None else ""
+        cmdline += '--indel_pileup_negational_model_path {} '.format(
+            args.indel_pileup_negational_model_path) if args.indel_pileup_negational_model_path is not None else ""
         cmdline += '--python {} '.format(args.python) if args.python != "python3" else ""
         cmdline += '--pypy {} '.format(args.pypy) if args.pypy != "pypy3" else ""
         cmdline += '--samtools {} '.format(args.samtools) if args.samtools != "samtools" else ""
         cmdline += '--parallel {} '.format(args.parallel) if args.parallel != "parallel" else ""
-        cmdline += '--prefer_recall ' if args.prefer_recall else ""
-        cmdline += '--prefer_balance ' if args.prefer_balance else ""
+        cmdline += '--longphase {} '.format(args.longphase) if args.longphase is not None else ""
+        cmdline += '--whatshap {} '.format(args.whatshap) if args.whatshap is not None else ""
+        cmdline += '--use_longphase_for_intermediate_phasing {} '.format(
+            args.use_longphase_for_intermediate_phasing) if args.use_longphase_for_intermediate_phasing is not None else ""
+        cmdline += '--use_whatshap_for_intermediate_phasing {} '.format(
+            args.use_whatshap_for_intermediate_phasing) if args.use_whatshap_for_intermediate_phasing is not None else ""
         cmdline += '--use_gpu ' if args.use_gpu else ""
-        cmdline += '--indel_min_af {} '.format(args.indel_min_af) if args.indel_min_af is not None else ""
-        cmdline += '--enable_realignment False ' if args.enable_realignment is False else ""
-        cmdline += '--apply_haplotype_filtering False ' if args.apply_haplotype_filtering is False else ""
-        cmdline += '--disable_nonsomatic_tagging ' if args.disable_nonsomatic_tagging else ""
-        cmdline += '--disable_print_nonsomatic_calls ' if args.disable_print_nonsomatic_calls else ""
-        cmdline += '--panel_of_normals {} '.format(args.panel_of_normals) if args.panel_of_normals is not None else ""
         cmdline += '--skip_steps {} '.format(args.skip_steps) if args.skip_steps is not None else ""
         cmdline += '--conda_prefix {} '.format(args.conda_prefix) if args.conda_prefix is not None else ""
+        cmdline += '--disable_intermediate_phasing ' if args.disable_intermediate_phasing else ""
+        cmdline += '--disable_indel_calling ' if args.disable_indel_calling else ""
+        cmdline += '--print_ref_calls ' if args.print_ref_calls else ""
+        cmdline += '--enable_realignment False ' if args.enable_realignment is False else ""
+        cmdline += '--enable_postfilter False ' if args.enable_postfilter is False else ""
+        cmdline += '--apply_haplotype_filtering False ' if args.apply_haplotype_filtering is False else ""
+        cmdline += '--disable_nonsomatic_tagging ' if args.disable_nonsomatic_tagging else ""
+        cmdline += '--do_not_print_nonsomatic_calls ' if args.do_not_print_nonsomatic_calls else ""
         args.cmdline = cmdline
     except:
         return args
+    args.cmdline = cmdline
     logging("[COMMAND] " + cmdline + '\n')
     return args
 
@@ -777,6 +948,8 @@ def somatic_calling(args):
     step = 1
     echo_list = []
     commands_list = []
+    phasing_output_path = args.output_dir + '/tmp/phasing_output'
+    tumor_bam_prefix = phasing_output_path + '/phased_bam_output/tumor_' if args.phase_tumor else args.tumor_bam_fn
 
     try:
         rc = subprocess.check_call('time', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -784,9 +957,9 @@ def somatic_calling(args):
     except subprocess.CalledProcessError as e:
         time = ''
 
-    # Pileup calling
+    # Somatic Calling
     # STEP 1: EXTRACT CANDIDATES
-    echo_list.append("[INFO] STEP {}: Extract Variant Candidates from Tumor BAM".format(step))
+    echo_list.append("[INFO] STEP 1: Extract Variant Candidates from Tumor BAM")
     step += 1
     ec_command = '( ' + time + args.parallel
     ec_command += ' --joblog ' + args.output_dir + '/logs/parallel_1_extract_tumor_candidates.log'
@@ -803,24 +976,29 @@ def somatic_calling(args):
     ec_command += ' --platform ' + args.platform
     ec_command += ' --min_coverage ' + str(args.min_coverage)
     ec_command += ' --min_bq ' + str(args.min_bq)
+    ec_command += ' --bed_fn_source ' + str(args.bed_fn)
     ec_command += ' --bed_fn ' + os.path.join(args.output_dir, 'tmp', 'split_beds', '{1}')
+    if not args.disable_indel_calling:
+        ec_command += ' --call_indels_only_in_these_regions ' + os.path.join(args.output_dir, 'tmp', 'split_indel_beds', '{1}')
+        ec_command += ' --select_indel_candidates True'
     ec_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
     ec_command += ' --output_depth True '
-    ec_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
     ec_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
+    ec_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
     ec_command += ' :::: ' + os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
     ec_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/1_EC.log'
     ec_command += ' && ' + args.pypy + ' ' + main_entry + ' concat_files'
     ec_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
-    ec_command += ' --input_prefix ' + "CANDIDATES_FILE_"
-    ec_command += ' --output_fn CANDIDATES_FILES '
+    ec_command += ' --input_prefix ' + "SNV_CANDIDATES_FILE_"
+    ec_command += ' --output_fn SNV_CANDIDATES_FILES'
     commands_list.append(ec_command)
 
-    ##STEP 2: CREATE PILEUP TENSOR
-    echo_list.append("[INFO] STEP 2: Pileup Model Calling\n")
-    echo_list[-1] += ("[INFO] Create Tensors for Affirmative Model")
+    ## STEP 2: SNV PILEUP MODEL CALLING
+    ## CREATE SNV PILEUP TENSOR
+    echo_list.append("[INFO] STEP 2: SNV Pileup Model Calling\n")
+    echo_list[-1] += ("[INFO] Create Tensors for SNV Pileup Affirmative Model")
     cpt_aff_command = '( ' + time + args.parallel
-    cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative.log'
+    cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative_snv.log'
     cpt_aff_command += ' -j ' + str(args.threads)
     cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
     cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -831,19 +1009,19 @@ def somatic_calling(args):
     cpt_aff_command += ' --candidates_bed_regions {1}'
     cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
     cpt_aff_command += ' --platform ' + args.platform
-    cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative.log'
+    cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
+    cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative_SNV.log'
     commands_list += [cpt_aff_command]
 
     if args.platform == 'ilmn':
-        echo_list.append("[INFO] Create Tensors for Negational Model")
-        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*',
-                                                args.output_dir + '/tmp/pileup_tensor_can_negational/')]
-
+        echo_list.append("[INFO] Create Tensors for SNV Pileup Negational Model")
+        cpt_neg_command = "ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*_snv',
+                                                args.output_dir + '/tmp/pileup_tensor_can_negational/')
+        commands_list += [cpt_neg_command]
     else:
-        echo_list.append("[INFO] Create Tensors for Negational Model")
+        echo_list.append("[INFO] Create Tensors for SNV Pileup Negational Model")
         cpt_neg_command = '( ' + time + args.parallel
-        cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational.log'
+        cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational_snv.log'
         cpt_neg_command += ' -j ' + str(args.threads)
         cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
         cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -854,151 +1032,463 @@ def somatic_calling(args):
         cpt_neg_command += ' --min_bq 0'
         cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
         cpt_neg_command += ' --platform ' + args.platform
-        cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-        cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational.log'
+        cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
+        cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational_SNV.log'
         commands_list += [cpt_neg_command]
 
-    ## STEP 3: PREDICT
-    echo_list.append("[INFO] Pileup Model Prediction along with Affirmative & Negational Model")
+    ## PREDICT SNV
+    echo_list.append("[INFO] SNV Pileup Model Prediction along with Affirmative & Negational Model")
     p_predict_command = '( ' + time + args.parallel
-    p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict.log'
+    p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict_snv.log'
     p_predict_command += ' -j ' + str(args.threads)
     p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
     p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
     p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
     p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-    p_predict_command += ' --chkpnt_fn_acgt ' + args.pileup_affirmative_model_path
-    p_predict_command += ' --chkpnt_fn_nacgt ' + args.pileup_negational_model_path
+    p_predict_command += ' --chkpnt_fn_acgt ' + args.snv_pileup_affirmative_model_path
+    p_predict_command += ' --chkpnt_fn_nacgt ' + args.snv_pileup_negational_model_path
     p_predict_command += ' --use_gpu ' + str(args.use_gpu)
     p_predict_command += ' --platform ' + args.platform
     p_predict_command += ' --ctg_name {1/.}'
     p_predict_command += ' --pileup '
     p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
-    p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT.log'
+    p_predict_command += ' --disable_indel_calling True'
+    p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
+    p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT_SNV.log'
     commands_list += [p_predict_command]
 
-    # STEP 4: CALL VARIANTS
-    echo_list.append("[INFO] Pileup Model Calling Variants")
+    # CALL SNV VARIANTS
+    echo_list.append("[INFO] SNV Pileup Model Calling Variants")
     cv_command = '( ' + time + args.parallel
-    cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants.log'
+    cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants_snv.log'
     cv_command += ' -j ' + str(args.threads)
     cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
     cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
     cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
+    cv_command += ' --ref_fn ' + args.ref_fn
     cv_command += ' --platform ' + args.platform
     cv_command += ' --likelihood_matrix_data {} '.format(
-        args.likelihood_matrix_data) if args.likelihood_matrix_data is not None else ''
+        args.snv_likelihood_matrix_data) if args.snv_likelihood_matrix_data is not None else ''
     cv_command += ' --show_ref ' if args.print_ref_calls else ""
-    cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/CANDIDATES_FILES'
-    cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS.log'
+    cv_command += ' --disable_indel_calling True'
+    cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
+    cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS_SNV.log'
     commands_list += [cv_command]
 
-    # STEP 5: MERGE CALLING VCFs
-    echo_list.append("[INFO] Merge Pileup VCFs")
+    # MERGE CALLING SNV VCFs
+    echo_list.append("[INFO] Merge SNV VCFs")
     p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
     p_mv_command += ' --ref_fn ' + args.ref_fn
     p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
     p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
-    p_mv_command += ' --vcf_fn_prefix ' + 'p_'
-    p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/pileup.vcf'
+    p_mv_command += ' --vcf_fn_suffix ' + 'snv.vcf'
+    p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
     commands_list += [p_mv_command]
 
     if not args.disable_nonsomatic_tagging:
-        # STEP 6: NON-SOMATIC TAGGING
-        echo_list.append("[INFO] STEP 3: Non-somatic Tagging")
+        # STEP 3: SNV NON-SOMATIC TAGGING
+        echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
         gf_command = '( ' + time + args.parallel
-        gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-4_nonsomatic_tagging.log'
+        gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_3_nonsomatic_tagging_snv.log'
         gf_command += ' -j ' + str(args.threads)
         gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
-        gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/pileup.vcf'
-        gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/nonsomatic_tagging_{1}.vcf'
+        gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+        gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_nonsomatic_tagging_{1}.vcf'
         gf_command += ' --ctg_name {1} '
         gf_command += ' --pypy3 ' + args.pypy
         gf_command += ' --parallel ' + args.parallel
         gf_command += ' --show_ref ' if args.print_ref_calls else ''
-        gf_command += ' --disable_print_nonsomatic_calls ' if args.disable_print_nonsomatic_calls else ''
+        gf_command += ' --do_not_print_nonsomatic_calls ' if args.do_not_print_nonsomatic_calls else ''
         gf_command += ' --panel_of_normals {} '.format(
             args.panel_of_normals) if args.panel_of_normals is not None else ''
+        gf_command += ' --panel_of_normals_require_allele_matching {} '.format(
+            args.panel_of_normals_require_allele_matching) if args.panel_of_normals_require_allele_matching is not None else ''
         gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-        gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/3_NONSOMATIC_TAG.log'
+        gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/3_NONSOMATIC_TAG_SNV.log'
         commands_list += [gf_command]
 
-        # STEP 6-1 MERGE NON-SOMATIC TAGGING VCFs
-        echo_list.append("[INFO] Merge Pileup Non-somatic Tagging VCFs")
+        # MERGE SNV NON-SOMATIC TAGGING VCFs
+        echo_list.append("[INFO] Merge SNV Non-somatic Tagging VCFs")
         p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
         p_mv_command += ' --ref_fn ' + args.ref_fn
         p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
         p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
-        p_mv_command += ' --vcf_fn_prefix ' + 'nonsomatic_tagging_'
-        p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf'
+        p_mv_command += ' --vcf_fn_prefix ' + 'snv_nonsomatic_tagging_'
+        p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
         commands_list += [p_mv_command]
-
     else:
-        # STEP 6: NON-SOMATIC TAGGING
-        echo_list.append("[INFO] STEP 3: Non-somatic Tagging")
-        commands_list += ["ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/pileup.vcf',
-                                                args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf')]
+        # STEP 3: SNV NON-SOMATIC TAGGING
+        echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
+        nst_command = "ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/snv_pileup.vcf',
+                                                args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf')
+        commands_list += [nst_command]
+
+    if args.platform != 'ilmn' and args.phase_tumor:
+        echo_list.append("[INFO] Select Heterozygous SNP for Phasing")
+        ssp_command = '( ' + time + args.parallel
+        ssp_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_1_select_hetero_snp_for_phasing.log'
+        ssp_command += ' -j ' + str(args.threads)
+        ssp_command += ' ' + args.pypy + ' ' + main_entry + ' select_hetero_snp_for_phasing'
+        ssp_command += ' --tumor_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+        ssp_command += ' --output_folder ' + phasing_output_path + '/vcf'
+        ssp_command += ' --ctg_name {1}'
+        ssp_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        ssp_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/1_select_hetero_snp_for_phasing.log'
+        commands_list.append(ssp_command)
+
+        echo_list.append("[INFO] Phase the Tumor BAM")
+        if args.use_longphase_for_intermediate_phasing is not None:
+            pt_command = '( ' + time + args.parallel
+            pt_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_2_phase_tumor.log'
+            pt_command += ' -j ' + str(args.threads)
+            pt_command += ' ' + args.longphase + ' phase '
+            pt_command += ' -s ' + phasing_output_path + '/vcf/{1}.vcf'
+            pt_command += ' -b ' + args.tumor_bam_fn
+            pt_command += ' -r ' + args.ref_fn
+            pt_command += ' -t ' + str(args.threads)
+            pt_command += ' -o ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}'
+            pt_command += ' --ont' if args.platform == 'ont' else ' --pb'
+            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            pt_command += ' && ' + args.parallel
+            pt_command += ' -j ' + str(args.threads)
+            pt_command += ' bgzip -f ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf'
+            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            pt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/2_phase_tumor.log'
+        else:
+            pt_command = '( ' + time + args.parallel
+            pt_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_2_phase_tumor.log'
+            pt_command += ' -j ' + str(args.threads)
+            pt_command += ' ' + args.whatshap + ' phase '
+            pt_command += ' --output ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
+            pt_command += ' --reference ' + args.ref_fn
+            pt_command += ' --chromosome {1}'
+            pt_command += ' --distrust-genotypes'
+            pt_command += ' --ignore-read-groups'
+            pt_command += ' ' + phasing_output_path + '/vcf/{1}.vcf'
+            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            pt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/2_phase_tumor.log'
+
+        tabix_command = args.parallel + ' -j ' + str(args.threads)
+        tabix_command += ' tabix' + ' -f -p vcf'
+        tabix_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
+        tabix_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        commands_list.append(pt_command + ' && ' + tabix_command)
+
+        echo_list.append("[INFO] Haplotag the Tumor BAM")
+        ht_command = '( ' + time + args.parallel
+        ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
+        ht_command += ' -j ' + str(args.threads)
+        ht_command += ' ' + args.whatshap + ' haplotag'
+        ht_command += ' --output ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
+        ht_command += ' --reference ' + args.ref_fn
+        ht_command += ' --regions {1} '
+        ht_command += ' --ignore-read-groups'
+        ht_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
+        ht_command += ' ' + args.tumor_bam_fn
+        ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
+
+        index_command = args.parallel + ' -j ' + str(args.threads)
+        index_command += ' ' + args.samtools + ' index '
+        index_command += ' -@' + str(args.threads)
+        index_command += ' ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
+        index_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        commands_list.append(ht_command + ' && ' + index_command)
 
     if args.platform == 'ilmn':
-        # STEP 7: SHORT-READ REALIGNMENT
-        echo_list.append("[INFO] STEP 4: Short-read Realignment")
+        # STEP 4: SHORT-READ REALIGNMENT for SNV Variants
+        echo_list.append("[INFO] STEP 4: Short-read Realignment for SNV Variants")
         realign_command = '( ' + time + args.python + ' ' + main_entry + ' realign_variants'
         realign_command += ' --bam_fn ' + args.tumor_bam_fn
         realign_command += ' --ref_fn ' + args.ref_fn
-        realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf'
-        realign_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
+        realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
+        realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
         realign_command += ' --samtools ' + args.samtools
         realign_command += ' --python ' + args.python
         realign_command += ' --threads ' + str(args.threads)
         realign_command += ' --show_ref ' if args.print_ref_calls else ''
         realign_command += ' --enable_realignment ' + str(args.enable_realignment)
-        realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_REALIGN.log'
-        commands_list += [realign_command]
+        realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4-1_REALIGN_SNV.log'
 
+        postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
+        postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+        postfilter_command += ' --ref_fn ' + args.ref_fn
+        postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
+        postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        postfilter_command += ' --samtools ' + args.samtools
+        postfilter_command += ' --pypy3 ' + args.pypy
+        postfilter_command += ' --parallel ' + args.parallel
+        postfilter_command += ' --threads ' + str(args.threads)
+        postfilter_command += ' --debug ' if args.debug else ''
+        postfilter_command += ' --show_ref ' if args.print_ref_calls else ''
+        postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
+        postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4-2_POSTFILTER_SNV.log'
+
+        commands_list += [realign_command + ' && ' + postfilter_command]
     else:
-        # STEP 7: HAPLOTYPE FILTERING
-        echo_list.append("[INFO] STEP 4: Haplotype Filtering")
+        # STEP 4: HAPLOTYPE FILTERING for SNV Variants
+        echo_list.append("[INFO] STEP 4: Haplotype Filtering for SNV Variants")
         hap_g_command = '( ' + time + args.pypy + ' ' + main_entry + ' haplotype_filtering'
-        hap_g_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+        hap_g_command += ' --tumor_bam_fn ' + tumor_bam_prefix
         hap_g_command += ' --ref_fn ' + args.ref_fn
-        hap_g_command += ' --germline_vcf_fn ' + args.output_dir + '/tmp/vcf_output/pileup.vcf'
-        hap_g_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/pileup_nonsomatic_tagging.vcf'
+        hap_g_command += ' --germline_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+        hap_g_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
         hap_g_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
+        hap_g_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
         hap_g_command += ' --samtools ' + args.samtools
         hap_g_command += ' --pypy3 ' + args.pypy
         hap_g_command += ' --parallel ' + args.parallel
         hap_g_command += ' --threads ' + str(args.threads)
         hap_g_command += ' --debug ' if args.debug else ''
         hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
-        hap_g_command += ' --apply_haplotype_filtering False' if not args.apply_haplotype_filtering else ''
-        hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER.log'
+        hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
+        hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER_SNV.log'
         commands_list += [hap_g_command]
 
-    # STEP 8: VCF POST-PROCESSING
-    echo_list.append("[INFO] STEP 5: VCF Post-processing")
-    sort_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
-    sort_vcf_command += ' --ref_fn ' + args.ref_fn
-    sort_vcf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/pileup_filtering.vcf'
-    sort_vcf_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.output_prefix)
-    sort_vcf_command += ' --platform ' + args.platform
-    sort_vcf_command += ' --qual ' + str(args.qual)
-    sort_vcf_command += ' --sample_name ' + str(args.sample_name)
-    sort_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
-    sort_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_PV.log'
-    commands_list += [sort_vcf_command]
+    # STEP 5: SNV VCF POST-PROCESSING
+    echo_list.append("[INFO] STEP 5: SNV VCF Post-processing")
+    postprocess_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
+    postprocess_vcf_command += ' --ref_fn ' + args.ref_fn
+    postprocess_vcf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+    postprocess_vcf_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.snv_output_prefix)
+    postprocess_vcf_command += ' --platform ' + args.platform
+    postprocess_vcf_command += ' --qual ' + str(args.qual)
+    postprocess_vcf_command += ' --qual_cutoff_phaseable_region ' + str(args.qual_cutoff_phaseable_region)
+    postprocess_vcf_command += ' --qual_cutoff_unphaseable_region ' + str(args.qual_cutoff_unphaseable_region)
+    postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
+    postprocess_vcf_command += ' --disable_indel_calling True'
+    postprocess_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
+    postprocess_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_PV_SNV.log'
+    commands_list += [postprocess_vcf_command]
 
-    # STEP 9: ADD REFERENCE CALLs
+    # ADD REFERENCE CALLs for SNV Calling
     if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
-        echo_list.append("[INFO] Add reference calls to the output VCF output")
+        echo_list.append("[INFO] Add Reference Calls to the VCF Output for SNV Calling")
         genotyping_command = args.pypy + ' ' + main_entry + ' add_back_missing_variants_in_genotyping'
         genotyping_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
         genotyping_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
-        genotyping_command += ' --call_fn ' + args.output_dir + '/{}.vcf.gz'.format(args.output_prefix)
-        genotyping_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.output_prefix)
+        genotyping_command += ' --call_fn ' + args.output_dir + '/{}.vcf.gz'.format(args.snv_output_prefix)
+        genotyping_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.snv_output_prefix)
         genotyping_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
         genotyping_command += ' 2>&1 | tee ' + args.output_dir + '/logs/6_GT.log'
         commands_list += [genotyping_command]
+
+    if not args.disable_indel_calling:
+        # STEP 6: CREATE INDEL PILEUP TENSOR
+        echo_list.append("[INFO] STEP 6: Indel Pileup Model Calling\n")
+        echo_list[-1] += ("[INFO] Create Tensors for Indel Pileup Affirmative Model")
+        indel_cpt_aff_command = args.pypy + ' ' + main_entry + ' concat_files'
+        indel_cpt_aff_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
+        indel_cpt_aff_command += ' --input_prefix ' + "INDEL_CANDIDATES_FILE_"
+        indel_cpt_aff_command += ' --output_fn INDEL_CANDIDATES_FILES '
+        indel_cpt_aff_command += ' && ( ' + time + args.parallel
+        indel_cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-1_create_tensor_affirmative_indel.log'
+        indel_cpt_aff_command += ' -j ' + str(args.threads)
+        indel_cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+        indel_cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+        indel_cpt_aff_command += ' --ref_fn ' + args.ref_fn
+        indel_cpt_aff_command += ' --ctg_name {1/.}'
+        indel_cpt_aff_command += ' --min_bq ' + str(args.min_bq)
+        indel_cpt_aff_command += ' --samtools ' + args.samtools
+        indel_cpt_aff_command += ' --candidates_bed_regions {1}'
+        indel_cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+        indel_cpt_aff_command += ' --platform ' + args.platform
+        indel_cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
+        indel_cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-1_CPT_Affirmative_INDEL.log'
+        commands_list += [indel_cpt_aff_command]
+
+        if args.platform == 'ilmn':
+            echo_list.append("[INFO] Create Tensors for Indel Pileup Negational Model")
+            indel_cpt_neg_command = "ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*_indel',
+                                                    args.output_dir + '/tmp/pileup_tensor_can_negational/')
+            commands_list += [indel_cpt_neg_command]
+        else:
+            echo_list.append("[INFO] Create Tensors for Indel Pileup Negational Model")
+            indel_cpt_neg_command = '( ' + time + args.parallel
+            indel_cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-1_create_tensor_negational_indel.log'
+            indel_cpt_neg_command += ' -j ' + str(args.threads)
+            indel_cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
+            indel_cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+            indel_cpt_neg_command += ' --ref_fn ' + args.ref_fn
+            indel_cpt_neg_command += ' --ctg_name {1/.}'
+            indel_cpt_neg_command += ' --samtools ' + args.samtools
+            indel_cpt_neg_command += ' --candidates_bed_regions {1}'
+            indel_cpt_neg_command += ' --min_bq 0'
+            indel_cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+            indel_cpt_neg_command += ' --platform ' + args.platform
+            indel_cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
+            indel_cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-1_CPT_Negational_INDEL.log'
+            commands_list += [indel_cpt_neg_command]
+
+        ## PREDICT INDEL
+        echo_list.append("[INFO] Indel Pileup Model Prediction along with Affirmative & Negational Model")
+        indel_p_predict_command = '( ' + time + args.parallel
+        indel_p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-2_predict_indel.log'
+        indel_p_predict_command += ' -j ' + str(args.threads)
+        indel_p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
+        indel_p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+        indel_p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+        indel_p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+        indel_p_predict_command += ' --chkpnt_fn_acgt ' + args.indel_pileup_affirmative_model_path
+        indel_p_predict_command += ' --chkpnt_fn_nacgt ' + args.indel_pileup_negational_model_path
+        indel_p_predict_command += ' --use_gpu ' + str(args.use_gpu)
+        indel_p_predict_command += ' --platform ' + args.platform
+        indel_p_predict_command += ' --ctg_name {1/.}'
+        indel_p_predict_command += ' --pileup '
+        indel_p_predict_command += ' --disable_indel_calling False '
+        indel_p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
+        indel_p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
+        indel_p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-2_PREDICT_INDEL.log'
+        commands_list += [indel_p_predict_command]
+
+        # INDEL CALL VARIANTS
+        echo_list.append("[INFO] Indel Pileup Model Calling Variants")
+        indel_cv_command = '( ' + time + args.parallel
+        indel_cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-3_call_variants_indel.log'
+        indel_cv_command += ' -j ' + str(args.threads)
+        indel_cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
+        indel_cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+        indel_cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
+        indel_cv_command += ' --platform ' + args.platform
+        indel_cv_command += ' --likelihood_matrix_data {} '.format(
+            args.indel_likelihood_matrix_data) if args.indel_likelihood_matrix_data is not None else ''
+        indel_cv_command += ' --disable_indel_calling False '
+        indel_cv_command += ' --show_ref ' if args.print_ref_calls else ""
+        indel_cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
+        indel_cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-3_CALL_VARIANTS_INDEL.log'
+        commands_list += [indel_cv_command]
+
+        # MERGE INDEL CALLING VCFs
+        echo_list.append("[INFO] Merge Indel VCFs")
+        indel_p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
+        indel_p_mv_command += ' --ref_fn ' + args.ref_fn
+        indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
+        indel_p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+        indel_p_mv_command += ' --vcf_fn_suffix ' + 'indel.vcf'
+        indel_p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup.vcf'
+        commands_list += [indel_p_mv_command]
+
+        if not args.disable_nonsomatic_tagging:
+            # INDEL NON-SOMATIC TAGGING
+            echo_list.append("[INFO] STEP 7: Non-somatic Tagging for Indel Variants")
+            indel_gf_command = '( ' + time + args.parallel
+            indel_gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_7_nonsomatic_tagging_indel.log'
+            indel_gf_command += ' -j ' + str(args.threads)
+            indel_gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
+            indel_gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup.vcf'
+            indel_gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_nonsomatic_tagging_{1}.vcf'
+            indel_gf_command += ' --ctg_name {1} '
+            indel_gf_command += ' --pypy3 ' + args.pypy
+            indel_gf_command += ' --parallel ' + args.parallel
+            indel_gf_command += ' --show_ref ' if args.print_ref_calls else ''
+            indel_gf_command += ' --do_not_print_nonsomatic_calls ' if args.do_not_print_nonsomatic_calls else ''
+            indel_gf_command += ' --panel_of_normals {} '.format(
+                args.panel_of_normals) if args.panel_of_normals is not None else ''
+            indel_gf_command += ' --panel_of_normals_require_allele_matching {} '.format(
+                args.panel_of_normals_require_allele_matching) if args.panel_of_normals_require_allele_matching is not None else ''
+            indel_gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            indel_gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/7_NONSOMATIC_TAG_INDEL.log'
+            commands_list += [indel_gf_command]
+
+            # MERGE INDEL NON-SOMATIC TAGGING VCFs
+            echo_list.append("[INFO] Merge Indel Non-somatic Tagging VCFs")
+            indel_p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
+            indel_p_mv_command += ' --ref_fn ' + args.ref_fn
+            indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
+            indel_p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+            indel_p_mv_command += ' --vcf_fn_prefix ' + 'indel_nonsomatic_tagging_'
+            indel_p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
+            commands_list += [indel_p_mv_command]
+        else:
+            # INDEL NON-SOMATIC TAGGING
+            echo_list.append("[INFO] STEP 7: Non-somatic Tagging for SNV Variants")
+            indel_nst_command = "ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/indel_pileup.vcf',
+                                                    args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf')
+            commands_list += [indel_nst_command]
+
+        if args.platform == 'ilmn':
+            # SHORT-READ REALIGNMENT for Indel Variants
+            echo_list.append("[INFO] STEP 8: Short-read Realignment for Indel Variants")
+            indel_realign_command = '( ' + time + args.python + ' ' + main_entry + ' realign_variants'
+            indel_realign_command += ' --bam_fn ' + args.tumor_bam_fn
+            indel_realign_command += ' --ref_fn ' + args.ref_fn
+            indel_realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
+            indel_realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_realign_command += ' --samtools ' + args.samtools
+            indel_realign_command += ' --python ' + args.python
+            indel_realign_command += ' --threads ' + str(args.threads)
+            indel_realign_command += ' --show_ref ' if args.print_ref_calls else ''
+            indel_realign_command += ' --is_indel '
+            indel_realign_command += ' --enable_realignment ' + str(args.enable_realignment)
+            indel_realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8-1_REALIGN_INDEL.log'
+
+            indel_postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
+            indel_postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
+            indel_postfilter_command += ' --ref_fn ' + args.ref_fn
+            indel_postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
+            indel_postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_postfilter_command += ' --samtools ' + args.samtools
+            indel_postfilter_command += ' --pypy3 ' + args.pypy
+            indel_postfilter_command += ' --parallel ' + args.parallel
+            indel_postfilter_command += ' --threads ' + str(args.threads)
+            indel_postfilter_command += ' --debug ' if args.debug else ''
+            indel_postfilter_command += ' --show_ref ' if args.print_ref_calls else ''
+            indel_postfilter_command += ' --is_indel '
+            indel_postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
+            indel_postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8-2_POSTFILTER_INDEL.log'
+
+            commands_list += [indel_realign_command + ' && ' + indel_postfilter_command]
+        else:
+            # INDEL HAPLOTYPE FILTERING
+            echo_list.append("[INFO] STEP 8: Haplotype Filtering for Indel Variants")
+            indel_hap_g_command = '( ' + time + args.pypy + ' ' + main_entry + ' haplotype_filtering'
+            indel_hap_g_command += ' --tumor_bam_fn ' + tumor_bam_prefix
+            indel_hap_g_command += ' --ref_fn ' + args.ref_fn
+            indel_hap_g_command += ' --germline_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+            indel_hap_g_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
+            indel_hap_g_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
+            indel_hap_g_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_hap_g_command += ' --samtools ' + args.samtools
+            indel_hap_g_command += ' --pypy3 ' + args.pypy
+            indel_hap_g_command += ' --parallel ' + args.parallel
+            indel_hap_g_command += ' --threads ' + str(args.threads)
+            indel_hap_g_command += ' --debug ' if args.debug else ''
+            indel_hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
+            indel_hap_g_command += ' --is_indel '
+            indel_hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
+            indel_hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8_HAP_FILTER_INDEL.log'
+            commands_list += [indel_hap_g_command]
+
+        # INDEL VCF POST-PROCESSING
+        echo_list.append("[INFO] STEP 9: Indel VCF Post-processing")
+        indel_postprocess_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
+        indel_postprocess_vcf_command += ' --ref_fn ' + args.ref_fn
+        indel_postprocess_vcf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+        indel_postprocess_vcf_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.indel_output_prefix)
+        indel_postprocess_vcf_command += ' --platform ' + args.platform
+        indel_postprocess_vcf_command += ' --qual ' + str(args.qual)
+        indel_postprocess_vcf_command += ' --qual_cutoff_phaseable_region ' + str(args.qual_cutoff_phaseable_region)
+        indel_postprocess_vcf_command += ' --qual_cutoff_unphaseable_region ' + str(args.qual_cutoff_unphaseable_region)
+        indel_postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
+        indel_postprocess_vcf_command += ' --disable_indel_calling False'
+        indel_postprocess_vcf_command += ' --indel_calling '
+        indel_postprocess_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
+        indel_postprocess_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/9_PV_INDEL.log'
+        commands_list += [indel_postprocess_vcf_command]
+
+        # ADD REFERENCE CALLs for Indel Calling
+        if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
+            echo_list.append("[INFO] Add Reference Calls to the VCF Output for Indel Calling")
+            indel_genotyping_command = args.pypy + ' ' + main_entry + ' add_back_missing_variants_in_genotyping'
+            indel_genotyping_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
+            indel_genotyping_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
+            indel_genotyping_command += ' --call_fn ' + args.output_dir + '/{}.vcf.gz'.format(args.indel_output_prefix)
+            indel_genotyping_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.indel_output_prefix)
+            indel_genotyping_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
+            indel_genotyping_command += ' 2>&1 | tee ' + args.output_dir + '/logs/10_GT_INDEL.log'
+            commands_list += [indel_genotyping_command]
 
     # EXECUTE COMMANDS STEP BY STEP
     skip_steps = args.skip_steps.rstrip().split(',') if args.skip_steps else None
@@ -1079,26 +1569,14 @@ def somatic_parser():
         help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}."
     )
 
-    optional_params = parser.add_argument_group('Optional parameters')
-    optional_params.add_argument(
-        "--pileup_affirmative_model_path",
-        type=str,
-        default=None,
-        help="Specify the path to your own tumor-only somatic calling pileup affirmative model."
-    )
+    optional_params = parser.add_argument_group('Commonly used parameters')
 
     optional_params.add_argument(
-        "--pileup_negational_model_path",
+        "-s",
+        "--sample_name",
         type=str,
-        default=None,
-        help="Specify the path to your own tumor-only somatic calling pileup negational model."
-    )
-
-    optional_params.add_argument(
-        "--likelihood_matrix_data",
-        type=str,
-        default=None,
-        help=SUPPRESS
+        default="SAMPLE",
+        help="Define the sample name to be shown in the VCF file. Default: SAMPLE."
     )
 
     optional_params.add_argument(
@@ -1109,17 +1587,21 @@ def somatic_parser():
         help="The name of the contigs to be processed. Split by ',' for multiple contigs. Default: all contigs will be processed."
     )
 
-    region_group = optional_params.add_mutually_exclusive_group(required=False)
+    optional_params.add_argument(
+        "--include_all_ctgs",
+        action='store_true',
+        help="Call variants on all contigs, otherwise call in chr{1..22,X,Y} and {1..22,X,Y}."
+    )
 
-    region_group.add_argument(
+    optional_params.add_argument(
         "-r",
         "--region",
         type=str,
         default=None,
-        help="A region to be processed. Format: `ctg_name:start-end` (start is 1-based)."
+        help="A region to be processed. Format: `ctg_name:start-end` (start is 1-based, including both end positions)."
     )
 
-    region_group.add_argument(
+    optional_params.add_argument(
         "-b",
         "--bed_fn",
         type=str,
@@ -1127,7 +1609,7 @@ def somatic_parser():
         help="Path to a BED file. Call variants only in the provided BED regions."
     )
 
-    region_group.add_argument(
+    optional_params.add_argument(
         "-G",
         "--genotyping_mode_vcf_fn",
         type=str,
@@ -1143,13 +1625,16 @@ def somatic_parser():
         help="Enable hybrid calling mode that combines the de novo calling results and genotyping results at the positions in the VCF file given."
     )
 
-    mode_group = optional_params.add_mutually_exclusive_group(required=False)
-    mode_group.add_argument(
-        '-q',
-        "--qual",
-        type=int,
-        default=None,
-        help="If set, variants with >QUAL will be marked as PASS, or LowQual otherwise."
+    optional_params.add_argument(
+        "--print_ref_calls",
+        action='store_true',
+        help="Show reference calls (0/0) in VCF output."
+    )
+
+    optional_params.add_argument(
+        "--disable_indel_calling",
+        action='store_true',
+        help="Disable Indel calling. Default: enabled."
     )
 
     optional_params.add_argument(
@@ -1160,127 +1645,10 @@ def somatic_parser():
     )
 
     optional_params.add_argument(
-        "--min_coverage",
-        type=int,
+        "--indel_min_af",
+        type=float,
         default=None,
-        help="Minimal coverage required for a variant to be called. Default: 4."
-    )
-
-    optional_params.add_argument(
-        "--panel_of_normals",
-        type=str,
-        default=None,
-        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' for multiple PoNs. Default: if not specified, provided 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', and '1000g-pon.sites.vcf.gz' PoNs will be included."
-    )
-
-    optional_params.add_argument(
-        "--disable_nonsomatic_tagging",
-        action='store_true',
-        help="Disable non-somatic variants tagging. Default: enable non-somatic variants tagging."
-    )
-
-    optional_params.add_argument(
-        "--chunk_size",
-        type=int,
-        default=None,
-        help="The size of each chuck for parallel processing. Default: 5000000."
-    )
-
-    optional_params.add_argument(
-        "-s",
-        "--sample_name",
-        type=str,
-        default="SAMPLE",
-        help="Define the sample name to be shown in the VCF file. Default: SAMPLE."
-    )
-
-    optional_params.add_argument(
-        "--output_prefix",
-        type=str,
-        default="output",
-        help="Prefix for output VCF filename. Default: output."
-    )
-
-    optional_params.add_argument(
-        "--remove_intermediate_dir",
-        action='store_true',
-        help="Remove the intermediate directory before finishing to save disk space."
-    )
-
-    optional_params.add_argument(
-        "--include_all_ctgs",
-        action='store_true',
-        help="Call variants on all contigs, otherwise call in chr{1..22} and {1..22}."
-    )
-
-    optional_params.add_argument(
-        "--print_ref_calls",
-        action='store_true',
-        help="Show reference calls (0/0) in VCF file."
-    )
-
-    optional_params.add_argument(
-        "--disable_print_nonsomatic_calls",
-        action='store_true',
-        help="Disable printing non-somatic calls. Default: enable non-somatic calls printing."
-    )
-
-    optional_params.add_argument(
-        '-d',
-        "--dry_run",
-        action='store_true',
-        help="Print the commands that will be ran."
-    )
-
-    optional_params.add_argument(
-        "--python",
-        type=str,
-        default="python3",
-        help="Absolute path of python, python3 >= 3.9 is required."
-    )
-
-    optional_params.add_argument(
-        "--pypy",
-        type=str,
-        default="pypy3",
-        help="Absolute path of pypy3, pypy3 >= 3.6 is required."
-    )
-
-    optional_params.add_argument(
-        "--samtools",
-        type=str,
-        default="samtools",
-        help="Absolute path of samtools, samtools version >= 1.10 is required."
-    )
-
-    optional_params.add_argument(
-        "--parallel",
-        type=str,
-        default="parallel",
-        help="Absolute path of parallel, parallel >= 20191122 is required."
-    )
-
-    ont_params = parser.add_argument_group('ONT parameters')
-
-    ont_params.add_argument(
-        "--enable_indel_calling",
-        action='store_true',
-        help=SUPPRESS
-    )
-
-    # options for internal process control
-    ## Prefer maximized recall
-    mode_group.add_argument(
-        "--prefer_recall",
-        action='store_true',
-        help=SUPPRESS
-    )
-
-    ## Prefer balance between precision and recall
-    mode_group.add_argument(
-        "--prefer_balance",
-        action='store_true',
-        help=SUPPRESS
+        help="Minimal Indel AF required for a variant to be called. Default: 0.05."
     )
 
     ## Minimum base quality
@@ -1291,89 +1659,314 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    ##If set then will use GPUs for inference. CUDA required
     optional_params.add_argument(
-        "-g",
-        "--use_gpu",
-        action='store_true',
-        help=SUPPRESS
-    )
-
-    ## Minimum Indel AF required for a candidate variant
-    optional_params.add_argument(
-        "--indel_min_af",
-        type=float,
+        "--min_coverage",
+        type=int,
         default=None,
-        help=SUPPRESS
+        help="Minimal coverage required for a variant to be called. Default: 4."
     )
 
-    ##List of (ctg_name, chunk_id, chunk_num)
     optional_params.add_argument(
-        "--chunk_list",
+        '-q',
+        "--qual",
+        type=int,
+        default=None,
+        help="If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 12, PacBio HiFi: 8, Illumina: 4."
+    )
+
+    optional_params.add_argument(
+        "--qual_cutoff_phaseable_region",
+        type=int,
+        default=None,
+        help="If set, variants called in phaseable regions with >QUAL will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`."
+    )
+
+    optional_params.add_argument(
+        "--qual_cutoff_unphaseable_region",
+        type=int,
+        default=None,
+        help="If set, variants called in unphaseable regions with >QUAL will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`."
+    )
+
+    optional_params.add_argument(
+        "--panel_of_normals",
+        type=str,
+        default=None,
+        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' if using multiple PoNs. Default: 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz,dbsnp.b138.non-somatic.sites.vcf.gz,1000g-pon.sites.vcf.gz'."
+    )
+
+    optional_params.add_argument(
+        "--panel_of_normals_require_allele_matching",
+        type=str,
+        default=None,
+        help="Use together with `--panel_of_normals`. Whether to require allele matching for each PoN. Split by ',' if using multiple PoNs. Default: 'True,True,False'."
+    )
+
+    optional_params.add_argument(
+        "--snv_output_prefix",
+        type=str,
+        default="snv",
+        help="Prefix for SNV output VCF filename. Default: snv."
+    )
+
+    optional_params.add_argument(
+        "--indel_output_prefix",
+        type=str,
+        default="indel",
+        help="Prefix for Indel output VCF filename. Default: indel."
+    )
+
+    optional_params.add_argument(
+        "--call_indels_only_in_these_regions",
+        type=str,
+        default=None,
+        help="Call Indel only in the provided regions. Supersede by `--bed_fn`. To call Indel in the whole genome, input a BED covering the whole genome. Default: 'GRCh38Chr1-22XY_excludedGIABStratifV3.3AllDifficultRegions_includedCMRGv1.0.bed'."
+    )
+
+    optional_params.add_argument(
+        "--do_not_print_nonsomatic_calls",
+        action='store_true',
+        help="Do not print those non-somatic variants tagged by `--panel_of_normals`."
+    )
+
+    other_params = parser.add_argument_group('Other parameters')
+    
+    other_params.add_argument(
+        "--snv_pileup_affirmative_model_path",
+        type=str,
+        default=None,
+        help="Specify the path to your own SNV pileup affirmative model."
+    )
+
+    other_params.add_argument(
+        "--snv_pileup_negational_model_path",
+        type=str,
+        default=None,
+        help="Specify the path to your own SNV pileup negational model."
+    )
+
+    other_params.add_argument(
+        "--snv_likelihood_matrix_data",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
+    other_params.add_argument(
+        "--indel_pileup_affirmative_model_path",
+        type=str,
+        default=None,
+        help="Specify the path to your own Indel pileup affirmative model."
+    )
+
+    other_params.add_argument(
+        "--indel_pileup_negational_model_path",
+        type=str,
+        default=None,
+        help="Specify the path to your own Indel pileup negational model."
+    )
+
+    other_params.add_argument(
+        "--indel_likelihood_matrix_data",
+        type=str,
+        default=None,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        '-d',
+        "--dry_run",
+        action='store_true',
+        help="Print the commands that will be ran, but do not run them."
+    )
+
+    other_params.add_argument(
+        "--chunk_size",
+        type=int,
+        default=None,
+        help="The size of each chuck for parallel processing. Default: 5000000."
+    )
+
+    other_params.add_argument(
+        "--remove_intermediate_dir",
+        action='store_true',
+        help="Remove the intermediate directory before finishing to save disk space."
+    )
+
+    other_params.add_argument(
+        "--python",
+        type=str,
+        default="python3",
+        help="Absolute path of python, python3 >= 3.9 is required."
+    )
+
+    other_params.add_argument(
+        "--pypy",
+        type=str,
+        default="pypy3",
+        help="Absolute path of pypy3, pypy3 >= 3.6 is required."
+    )
+
+    other_params.add_argument(
+        "--samtools",
+        type=str,
+        default="samtools",
+        help="Absolute path of samtools, samtools version >= 1.10 is required."
+    )
+
+    other_params.add_argument(
+        "--parallel",
+        type=str,
+        default="parallel",
+        help="Absolute path of parallel, parallel >= 20191122 is required."
+    )
+
+    other_params.add_argument(
+        "--longphase",
+        type=str,
+        default=None,
+        help="Absolute path of longphase, longphase >= 1.3 is required."
+    )
+
+    other_params.add_argument(
+        "--whatshap",
+        type=str,
+        default=None,
+        help="Absolute path of whatshap, whatshap >= 1.0 is required."
+    )
+
+    other_params.add_argument(
+        "--use_longphase_for_intermediate_phasing",
+        type=str2bool,
+        default=None,
+        help="Use longphase for intermediate phasing."
+    )
+
+    other_params.add_argument(
+        "--use_whatshap_for_intermediate_phasing",
+        type=str2bool,
+        default=None,
+        help="Use whatshap for intermediate phasing."
+    )
+
+    other_params.add_argument(
+        "--disable_intermediate_phasing",
+        action='store_true',
+        help="Disable intermediate phasing, runs faster but reduces precision."
+    )
+
+    other_params.add_argument(
+        "--disable_nonsomatic_tagging",
+        action='store_true',
+        help="Disable non-somatic variants tagging and ignore `--panel_of_normals`."
+    )
+
     ##Apply realignment for short-read data
-    optional_params.add_argument(
+    other_params.add_argument(
         "--enable_realignment",
         type=str2bool,
         default=True,
         help=SUPPRESS
     )
 
+    ##Apply postfiltering for short-read data
+    other_params.add_argument(
+        "--enable_postfilter",
+        type=str2bool,
+        default=True,
+        help=SUPPRESS
+    )
+
     ##Apply haplotype filtering for long-read data
-    optional_params.add_argument(
+    other_params.add_argument(
         "--apply_haplotype_filtering",
         type=str2bool,
         default=True,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    ## Phase tumor BAM in calling
+    other_params.add_argument(
+        "--phase_tumor",
+        type=str2bool,
+        default=None,
+        help=SUPPRESS
+    )
+
+    # options for internal process control
+    ## Prefer maximized recall
+    other_params.add_argument(
+        "--prefer_recall",
+        action='store_true',
+        help=SUPPRESS
+    )
+
+    ## Prefer balance between precision and recall
+    other_params.add_argument(
+        "--prefer_balance",
+        action='store_true',
+        help=SUPPRESS
+    )
+
+    ##If set then will use GPUs for inference. CUDA required
+    other_params.add_argument(
+        "-g",
+        "--use_gpu",
+        action='store_true',
+        help=SUPPRESS
+    )
+
+    ##List of (ctg_name, chunk_id, chunk_num)
+    other_params.add_argument(
+        "--chunk_list",
+        type=str,
+        default=None,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
         "--debug",
         type=str2bool,
         default=False,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--chunk_num",
         type=int,
         default=None,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--output_path",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--skip_steps",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--tee",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--conda_prefix",
         type=str,
         default=None,
         help=SUPPRESS
     )
 
-    optional_params.add_argument(
+    other_params.add_argument(
         "--cmdline",
         type=str,
         default=None,
@@ -1414,11 +2007,14 @@ def main():
 
     runtime = time() - call_start_time
     logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime / 60), int(runtime % 60)))
-    logging("[INFO] Finish calling, output file: {}/{}.vcf.gz\n".format(args.output_dir, args.output_prefix))
+    if not args.disable_indel_calling:
+        logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir, args.snv_output_prefix))
+        logging("[INFO] Finish calling, Indel output VCF file: {}/{}.vcf.gz\n".format(args.output_dir, args.indel_output_prefix))
+    else:
+        logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir, args.snv_output_prefix))
 
     if args.tee is not None:
         args.tee.stdin.close()
-
 
 if __name__ == '__main__':
     main()
