@@ -193,6 +193,9 @@ def extract_pair_candidates(args):
     alt_fn = args.alt_fn
     confident_bed_fn = file_path_from(args.bed_fn, allow_none=True, exit_on_not_found=False)
     is_confident_bed_file_given = confident_bed_fn is not None
+    given_bed_fn = args.bed_fn_source
+    is_given_bed_file = given_bed_fn is not None
+    default_indel_bed_fn = file_path_from(args.call_indels_only_in_these_regions, allow_none=True, exit_on_not_found=False)
     min_mapping_quality = args.min_mq
     min_base_quality = args.min_bq
     flankingBaseNum = param.flankingBaseNum if args.flanking is None else args.flanking
@@ -341,7 +344,6 @@ def extract_pair_candidates(args):
             select_indel_candidates=select_indel_candidates
         )
 
-
         if pos in hybrid_candidate_set:
             tumor_alt_info = str(depth) + '-' + ' '.join([' '.join([item[0], str(item[1])]) for item in pileup_list])
             hybrid_info_dict[pos] = AltInfo(ref_base=reference_base, tumor_alt_info=tumor_alt_info)
@@ -386,9 +388,20 @@ def extract_pair_candidates(args):
         output_bed.write('\t'.join([ctg_name, str(pos - 1), str(pos)]) + '\n')
     output_bed.close()
 
+    indel_tree = bed_tree_from(bed_file_path=default_indel_bed_fn, contig_name=ctg_name)
+
     snv_candidates_list = sorted([pos for pos in candidates_set if pos in snv_candidates_set])
+
     if select_indel_candidates:
         indel_candidates_list = sorted([pos for pos in candidates_set if pos in indel_candidates_set])
+        if not is_given_bed_file:
+            for pos in indel_candidates_set:
+                pass_indel_bed_region = len(indel_tree) == 0 or is_region_in(tree=indel_tree,
+                                                                         contig_name=ctg_name,
+                                                                         region_start=pos - 1,
+                                                                         region_end=pos)
+                if not pass_indel_bed_region:
+                    indel_candidates_list.remove(pos)
 
     gen_vcf = False
     if gen_vcf:
@@ -402,7 +415,6 @@ def extract_pair_candidates(args):
                                ref_fn=fasta_file_path, ctg_name=ctg_name, show_ref_calls=True)
         for pos in snv_candidates_list:
             genotype = '1/1'
-            ref_base, alt_base = "A", "A"
             if pos in truth_variant_dict:
                 print(ctg_name, pos, "in truth set")
                 continue
@@ -425,13 +437,13 @@ def extract_pair_candidates(args):
         vcf_writer.close()
 
     if select_indel_candidates:
-        print("[INFO] {} chunk {}/{}: Total snv candidates found: {}, total indel candidates found: {}".format(ctg_name, \
+        print("[INFO] {} chunk {}/{}: Total SNV candidates found: {}, total Indel candidates found: {}".format(ctg_name, \
                                                                                                                chunk_id,
                                                                                                                chunk_num,
                                                                                                                len(snv_candidates_list),
                                                                                                                len(indel_candidates_list)))
     else:
-        print("[INFO] {} chunk {}/{}: Total candidates found: {}".format(ctg_name,
+        print("[INFO] {} chunk {}/{}: Total SNV candidates found: {}".format(ctg_name,
                                                                          chunk_id,
                                                                          chunk_num,
                                                                          len(snv_candidates_list)))
@@ -443,7 +455,7 @@ def extract_pair_candidates(args):
         for idx in range(region_num):
             # a windows region for create tensor # samtools mpileup not include last position
             split_output = snv_candidates_list[idx * split_bed_size: (idx + 1) * split_bed_size]
-            output_path = os.path.join(candidates_folder, '{}.{}_{}_{}'.format(ctg_name, chunk_id, idx, region_num))
+            output_path = os.path.join(candidates_folder, '{}.{}_{}_{}_snv'.format(ctg_name, chunk_id, idx, region_num))
             all_candidates_regions.append(output_path)
             with open(output_path, 'w') as output_file:
                 output_file.write('\n'.join(
@@ -451,7 +463,7 @@ def extract_pair_candidates(args):
                      split_output]) + '\n')  # bed format
 
         all_candidates_regions_path = os.path.join(candidates_folder,
-                                                   'CANDIDATES_FILE_{}_{}'.format(ctg_name, chunk_id))
+                                                   'SNV_CANDIDATES_FILE_{}_{}'.format(ctg_name, chunk_id))
         with open(all_candidates_regions_path, 'w') as output_file:
             output_file.write('\n'.join(all_candidates_regions) + '\n')
 
@@ -518,8 +530,14 @@ def main():
     parser.add_argument('--ctg_end', type=int, default=None,
                         help="The 1-based inclusive ending position of the sequence to be processed, optional, will process the whole --ctg_name if not set")
 
+    parser.add_argument('--bed_fn_source', type=str_none, default=None,
+                        help="Call variant only in the provided regions. Default: None")
+
     parser.add_argument('--bed_fn', type=str, default=None,
-                        help="Call variant only in the provided regions. Will take an intersection if --ctg_name and/or (--ctg_start, --ctg_end) are set")
+                        help="Call variant only in the provided BED regions. Will take an intersection if --ctg_name and/or (--ctg_start, --ctg_end) are set")
+
+    parser.add_argument('--call_indels_only_in_these_regions', type=str, default=None,
+                        help="Call Indel only in the provided regions. Supersede by `--bed_fn`. To call Indel in the whole genome, input a BED covering the whole genome. Default: 'GRCh38Chr1-22XY_excludedGIABStratifV3.3AllDifficultRegions_includedCMRGv1.0.bed'")
 
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Path to the 'samtools', samtools version >= 1.10 is required. default: %(default)s")
@@ -546,7 +564,7 @@ def main():
     parser.add_argument('--hybrid_mode_vcf_fn', type=str_none, default=None,
                         help="EXPERIMENTAL: Variants that passed the threshold and additional VCF candidates will both be subjected to variant calling")
 
-    parser.add_argument('--genotyping_mode_vcf_fn', type=str, default=None,
+    parser.add_argument('--genotyping_mode_vcf_fn', type=str_none, default=None,
                         help="Candidate sites VCF file input, if provided, variants will only be called at the sites in the VCF file, default: %(default)s")
 
     # options for debug purpose
