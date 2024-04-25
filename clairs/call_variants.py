@@ -53,7 +53,7 @@ OutputConfig = namedtuple('OutputConfig', [
     'is_show_reference',
     'quality_score_for_pass',
     'pileup',
-    'enable_indel_calling'
+    'disable_indel_calling'
 ])
 OutputUtilities = namedtuple('OutputUtilities', [
     'print_debug_message',
@@ -119,13 +119,18 @@ def output_vcf_from_probability(
         probabilities_c,
         probabilities_g,
         probabilities_t,
+        probabilities_i,
+        probabilities_d,
         probabilities_na,
         probabilities_nc,
         probabilities_ng,
         probabilities_nt,
+        probabilities_ni,
+        probabilities_nd,
         likelihood_data_info_list,
         output_config=None,
         vcf_writer=None,
+        disable_indel_calling=False
 ):
     def decode_alt_info(alt_info):
         alt_info = alt_info.rstrip().split('-')
@@ -150,62 +155,137 @@ def output_vcf_from_probability(
     probabilities_is_c = probabilities_c[1]
     probabilities_is_g = probabilities_g[1]
     probabilities_is_t = probabilities_t[1]
+    probabilities_is_i = probabilities_i[1] if not disable_indel_calling else None
+    probabilities_is_d = probabilities_d[1] if not disable_indel_calling else None
     probabilities_is_na = probabilities_na[1]
     probabilities_is_nc = probabilities_nc[1]
     probabilities_is_ng = probabilities_ng[1]
     probabilities_is_nt = probabilities_nt[1]
+    probabilities_is_ni = probabilities_ni[1] if not disable_indel_calling else None
+    probabilities_is_nd = probabilities_nd[1] if not disable_indel_calling else None
 
-    likelihood_a_na = likelihood_data_info_list[0]
-    likelihood_c_nc = likelihood_data_info_list[1]
-    likelihood_g_ng = likelihood_data_info_list[2]
-    likelihood_t_nt = likelihood_data_info_list[3]
-    likelihood_a_points_with_zero_one = likelihood_data_info_list[4]
-    likelihood_na_points_with_zero_one = likelihood_data_info_list[5]
-    likelihood_c_points_with_zero_one = likelihood_data_info_list[6]
-    likelihood_nc_points_with_zero_one = likelihood_data_info_list[7]
-    likelihood_g_points_with_zero_one = likelihood_data_info_list[8]
-    likelihood_ng_points_with_zero_one = likelihood_data_info_list[9]
-    likelihood_t_points_with_zero_one = likelihood_data_info_list[10]
-    likelihood_nt_points_with_zero_one = likelihood_data_info_list[11]
+    if disable_indel_calling:
+        likelihood_a_na = likelihood_data_info_list[0]
+        likelihood_c_nc = likelihood_data_info_list[1]
+        likelihood_g_ng = likelihood_data_info_list[2]
+        likelihood_t_nt = likelihood_data_info_list[3]
+        likelihood_a_points_with_zero_one = likelihood_data_info_list[4]
+        likelihood_na_points_with_zero_one = likelihood_data_info_list[5]
+        likelihood_c_points_with_zero_one = likelihood_data_info_list[6]
+        likelihood_nc_points_with_zero_one = likelihood_data_info_list[7]
+        likelihood_g_points_with_zero_one = likelihood_data_info_list[8]
+        likelihood_ng_points_with_zero_one = likelihood_data_info_list[9]
+        likelihood_t_points_with_zero_one = likelihood_data_info_list[10]
+        likelihood_nt_points_with_zero_one = likelihood_data_info_list[11]
 
-    a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
-    na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
+        a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
+        na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
 
-    c_index = np.digitize(probabilities_is_c, likelihood_c_points_with_zero_one) - 1
-    nc_index = np.digitize(probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
+        c_index = np.digitize(probabilities_is_c, likelihood_c_points_with_zero_one) - 1
+        nc_index = np.digitize(probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
 
-    g_index = np.digitize(probabilities_is_g, likelihood_g_points_with_zero_one) - 1
-    ng_index = np.digitize(probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
+        g_index = np.digitize(probabilities_is_g, likelihood_g_points_with_zero_one) - 1
+        ng_index = np.digitize(probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
 
-    t_index = np.digitize(probabilities_is_t, likelihood_t_points_with_zero_one) - 1
-    nt_index = np.digitize(probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
+        t_index = np.digitize(probabilities_is_t, likelihood_t_points_with_zero_one) - 1
+        nt_index = np.digitize(probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
 
-    likelihood_a_na_weight = likelihood_a_na[a_index][na_index] + sys.float_info.epsilon
-    likelihood_c_nc_weight = likelihood_c_nc[c_index][nc_index] + sys.float_info.epsilon
-    likelihood_g_ng_weight = likelihood_g_ng[g_index][ng_index] + sys.float_info.epsilon
-    likelihood_t_nt_weight = likelihood_t_nt[t_index][nt_index] + sys.float_info.epsilon
+        likelihood_a_na_weight = likelihood_a_na[a_index][na_index] + sys.float_info.epsilon
+        likelihood_c_nc_weight = likelihood_c_nc[c_index][nc_index] + sys.float_info.epsilon
+        likelihood_g_ng_weight = likelihood_g_ng[g_index][ng_index] + sys.float_info.epsilon
+        likelihood_t_nt_weight = likelihood_t_nt[t_index][nt_index] + sys.float_info.epsilon
 
-    probs_is_a = likelihood_a_na_weight * (probabilities_is_a / probabilities_is_na)
-    probs_is_c = likelihood_c_nc_weight * (probabilities_is_c / probabilities_is_nc)
-    probs_is_g = likelihood_g_ng_weight * (probabilities_is_g / probabilities_is_ng)
-    probs_is_t = likelihood_t_nt_weight * (probabilities_is_t / probabilities_is_nt)
+        probs_is_a = likelihood_a_na_weight * (probabilities_is_a / probabilities_is_na)
+        probs_is_c = likelihood_c_nc_weight * (probabilities_is_c / probabilities_is_nc)
+        probs_is_g = likelihood_g_ng_weight * (probabilities_is_g / probabilities_is_ng)
+        probs_is_t = likelihood_t_nt_weight * (probabilities_is_t / probabilities_is_nt)
 
-    probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t])
-    normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
+        probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t])
+        normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
 
-    p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
+        p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
 
-    p_is_acgt_value = max(normalized_probs_is_acgt)
+        p_is_acgt_value = max(normalized_probs_is_acgt)
 
-    is_a = (p_is_acgt_index == 0)
-    is_c = (p_is_acgt_index == 1)
-    is_g = (p_is_acgt_index == 2)
-    is_t = (p_is_acgt_index == 3)
+        is_a = (p_is_acgt_index == 0)
+        is_c = (p_is_acgt_index == 1)
+        is_g = (p_is_acgt_index == 2)
+        is_t = (p_is_acgt_index == 3)
 
-    is_variant = (is_a and reference_base != 'A') or (is_c and reference_base != 'C') or \
-                 (is_g and reference_base != 'G') or (is_t and reference_base != 'T')
+        is_variant = (is_a and reference_base != 'A') or (is_c and reference_base != 'C') or \
+                     (is_g and reference_base != 'G') or (is_t and reference_base != 'T')
 
-    is_reference = not is_variant
+        is_reference = not is_variant
+
+    else:
+        likelihood_a_na = likelihood_data_info_list[0]
+        likelihood_c_nc = likelihood_data_info_list[1]
+        likelihood_g_ng = likelihood_data_info_list[2]
+        likelihood_t_nt = likelihood_data_info_list[3]
+        likelihood_i_ni = likelihood_data_info_list[4]
+        likelihood_d_nd = likelihood_data_info_list[5]
+        likelihood_a_points_with_zero_one = likelihood_data_info_list[6]
+        likelihood_na_points_with_zero_one = likelihood_data_info_list[7]
+        likelihood_c_points_with_zero_one = likelihood_data_info_list[8]
+        likelihood_nc_points_with_zero_one = likelihood_data_info_list[9]
+        likelihood_g_points_with_zero_one = likelihood_data_info_list[10]
+        likelihood_ng_points_with_zero_one = likelihood_data_info_list[11]
+        likelihood_t_points_with_zero_one = likelihood_data_info_list[12]
+        likelihood_nt_points_with_zero_one = likelihood_data_info_list[13]
+        likelihood_i_points_with_zero_one = likelihood_data_info_list[14]
+        likelihood_ni_points_with_zero_one = likelihood_data_info_list[15]
+        likelihood_d_points_with_zero_one = likelihood_data_info_list[16]
+        likelihood_nd_points_with_zero_one = likelihood_data_info_list[17]
+
+        a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
+        na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
+
+        c_index = np.digitize(probabilities_is_c, likelihood_c_points_with_zero_one) - 1
+        nc_index = np.digitize(probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
+
+        g_index = np.digitize(probabilities_is_g, likelihood_g_points_with_zero_one) - 1
+        ng_index = np.digitize(probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
+
+        t_index = np.digitize(probabilities_is_t, likelihood_t_points_with_zero_one) - 1
+        nt_index = np.digitize(probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
+
+        i_index = np.digitize(probabilities_is_i, likelihood_i_points_with_zero_one) - 1
+        ni_index = np.digitize(probabilities_is_ni, likelihood_ni_points_with_zero_one) - 1
+
+        d_index = np.digitize(probabilities_is_d, likelihood_d_points_with_zero_one) - 1
+        nd_index = np.digitize(probabilities_is_nd, likelihood_nd_points_with_zero_one) - 1
+
+        likelihood_a_na_weight = likelihood_a_na[a_index][na_index] + sys.float_info.epsilon
+        likelihood_c_nc_weight = likelihood_c_nc[c_index][nc_index] + sys.float_info.epsilon
+        likelihood_g_ng_weight = likelihood_g_ng[g_index][ng_index] + sys.float_info.epsilon
+        likelihood_t_nt_weight = likelihood_t_nt[t_index][nt_index] + sys.float_info.epsilon
+        likelihood_i_ni_weight = likelihood_i_ni[i_index][ni_index] + sys.float_info.epsilon
+        likelihood_d_nd_weight = likelihood_d_nd[d_index][nd_index] + sys.float_info.epsilon
+
+        probs_is_a = likelihood_a_na_weight * (probabilities_is_a / probabilities_is_na)
+        probs_is_c = likelihood_c_nc_weight * (probabilities_is_c / probabilities_is_nc)
+        probs_is_g = likelihood_g_ng_weight * (probabilities_is_g / probabilities_is_ng)
+        probs_is_t = likelihood_t_nt_weight * (probabilities_is_t / probabilities_is_nt)
+        probs_is_i = likelihood_i_ni_weight * (probabilities_is_i / probabilities_is_ni)
+        probs_is_d = likelihood_d_nd_weight * (probabilities_is_d / probabilities_is_nd)
+
+        probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t, probs_is_i, probs_is_d])
+        normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
+
+        p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
+
+        p_is_acgt_value = max(normalized_probs_is_acgt)
+
+        is_a = (p_is_acgt_index == 0)
+        is_c = (p_is_acgt_index == 1)
+        is_g = (p_is_acgt_index == 2)
+        is_t = (p_is_acgt_index == 3)
+        is_i = (p_is_acgt_index == 4)
+        is_d = (p_is_acgt_index == 5)
+
+        is_variant = is_i or is_d
+
+        is_reference = is_a or is_c or is_g or is_t
 
     def rank_variant_alt(tumor_alt_info_dict, tumor_read_depth):
         support_alt_dict = {}
@@ -216,7 +296,7 @@ def output_vcf_from_probability(
             if tumor_af > 0:
                 support_alt_dict[tumor_alt] = tumor_af
         if len(support_alt_dict) == 0:
-            return "", 0, 0
+            return "", 0
         alt_type_list = sorted(support_alt_dict.items(), key=lambda x: x[1], reverse=True)
         best_match_alt_list = []
         for i in range(len(alt_type_list)):
@@ -234,6 +314,9 @@ def output_vcf_from_probability(
         best_match_alt_list, tumor_supported_reads_count_list = rank_variant_alt(
             tumor_alt_info_dict, tumor_read_depth)
 
+        if best_match_alt_list == "":
+            return
+
         best_match_alt = best_match_alt_list[0]
         tumor_supported_reads_count = tumor_supported_reads_count_list[0]
 
@@ -248,14 +331,15 @@ def output_vcf_from_probability(
         if best_match_alt[0] == 'X':
             alternate_base = best_match_alt[1]
             is_SNP = True
-            is_variant_a = (is_a and 'A' in alternate_base_list)
-            is_variant_c = (is_c and 'C' in alternate_base_list)
-            is_variant_g = (is_g and 'G' in alternate_base_list)
-            is_variant_t = (is_t and 'T' in alternate_base_list)
-            if is_a or is_c or is_g or is_t:
-                if not (is_variant_a or is_variant_c or is_variant_g or is_variant_t):
-                    is_variant = False
-                    is_reference = True
+            if disable_indel_calling:
+                is_variant_a = (is_a and 'A' in alternate_base_list)
+                is_variant_c = (is_c and 'C' in alternate_base_list)
+                is_variant_g = (is_g and 'G' in alternate_base_list)
+                is_variant_t = (is_t and 'T' in alternate_base_list)
+                if is_a or is_c or is_g or is_t:
+                    if not (is_variant_a or is_variant_c or is_variant_g or is_variant_t):
+                        is_variant = False
+                        is_reference = True
         elif best_match_alt[0] == 'I':
             alternate_base = best_match_alt[1:]
             is_INS = True
@@ -271,11 +355,11 @@ def output_vcf_from_probability(
         return
 
     # discard Indel
-    if (len(reference_base) > 1 or len(alternate_base) > 1) and not output_config.enable_indel_calling:
+    if (len(reference_base) > 1 or len(alternate_base) > 1) and output_config.disable_indel_calling:
         return
 
-    if output_config.enable_indel_calling:
-        if len(reference_base) == 1 and len(alternate_base) == 1:
+    if not output_config.disable_indel_calling:
+        if len(reference_base) == 1 and len(alternate_base) == 1 and not output_config.is_show_reference:
             return
 
     def decode_alt_info(alt_info_dict, read_depth):
@@ -313,117 +397,176 @@ def output_vcf_from_probability(
     elif is_variant:
         genotype_string = "0/1" if tumor_allele_frequency < 1.0 else '1/1'
 
-    if is_reference and is_a:
-        probabilities_is_a = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_a)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_reference and is_c:
-        probabilities_is_c = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_c)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_reference and is_g:
-        probabilities_is_g = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_g)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_reference and is_t:
-        probabilities_is_t = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_t)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_reference and not is_a and not is_c and not is_g and not is_t:
-        if reference_base == 'A':
-            probabilities_is_a = normalized_probs_is_acgt[0]
+    if disable_indel_calling:
+        if is_reference and is_a:
+            probabilities_is_a = p_is_acgt_value
             quality_score = quality_score_from(probabilities_is_a)
             filtration_value = filtration_value_from(
                 quality_score_for_pass=output_config.quality_score_for_pass,
                 quality_score=quality_score,
                 is_reference=is_reference,
-                is_variant=is_variant
+                is_variant=is_variant,
             )
-        elif reference_base == 'C':
-            probabilities_is_c = normalized_probs_is_acgt[1]
+        elif is_reference and is_c:
+            probabilities_is_c = p_is_acgt_value
             quality_score = quality_score_from(probabilities_is_c)
             filtration_value = filtration_value_from(
                 quality_score_for_pass=output_config.quality_score_for_pass,
                 quality_score=quality_score,
                 is_reference=is_reference,
-                is_variant=is_variant
+                is_variant=is_variant,
             )
-        elif reference_base == 'G':
-            probabilities_is_g = normalized_probs_is_acgt[2]
+        elif is_reference and is_g:
+            probabilities_is_g = p_is_acgt_value
             quality_score = quality_score_from(probabilities_is_g)
             filtration_value = filtration_value_from(
                 quality_score_for_pass=output_config.quality_score_for_pass,
                 quality_score=quality_score,
                 is_reference=is_reference,
-                is_variant=is_variant
+                is_variant=is_variant,
             )
-        elif reference_base == 'T':
-            probabilities_is_t = normalized_probs_is_acgt[3]
+        elif is_reference and is_t:
+            probabilities_is_t = p_is_acgt_value
             quality_score = quality_score_from(probabilities_is_t)
             filtration_value = filtration_value_from(
                 quality_score_for_pass=output_config.quality_score_for_pass,
                 quality_score=quality_score,
                 is_reference=is_reference,
-                is_variant=is_variant
+                is_variant=is_variant,
             )
-    elif is_variant and is_a:
-        probabilities_is_a = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_a)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_variant and is_c:
-        probabilities_is_c = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_c)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_variant and is_g:
-        probabilities_is_g = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_g)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
-    elif is_variant and is_t:
-        probabilities_is_t = p_is_acgt_value
-        quality_score = quality_score_from(probabilities_is_t)
-        filtration_value = filtration_value_from(
-            quality_score_for_pass=output_config.quality_score_for_pass,
-            quality_score=quality_score,
-            is_reference=is_reference,
-            is_variant=is_variant,
-        )
+        elif is_reference and not is_a and not is_c and not is_g and not is_t:
+            if reference_base == 'A':
+                probabilities_is_a = normalized_probs_is_acgt[0]
+                quality_score = quality_score_from(probabilities_is_a)
+                filtration_value = filtration_value_from(
+                    quality_score_for_pass=output_config.quality_score_for_pass,
+                    quality_score=quality_score,
+                    is_reference=is_reference,
+                    is_variant=is_variant
+                )
+            elif reference_base == 'C':
+                probabilities_is_c = normalized_probs_is_acgt[1]
+                quality_score = quality_score_from(probabilities_is_c)
+                filtration_value = filtration_value_from(
+                    quality_score_for_pass=output_config.quality_score_for_pass,
+                    quality_score=quality_score,
+                    is_reference=is_reference,
+                    is_variant=is_variant
+                )
+            elif reference_base == 'G':
+                probabilities_is_g = normalized_probs_is_acgt[2]
+                quality_score = quality_score_from(probabilities_is_g)
+                filtration_value = filtration_value_from(
+                    quality_score_for_pass=output_config.quality_score_for_pass,
+                    quality_score=quality_score,
+                    is_reference=is_reference,
+                    is_variant=is_variant
+                )
+            elif reference_base == 'T':
+                probabilities_is_t = normalized_probs_is_acgt[3]
+                quality_score = quality_score_from(probabilities_is_t)
+                filtration_value = filtration_value_from(
+                    quality_score_for_pass=output_config.quality_score_for_pass,
+                    quality_score=quality_score,
+                    is_reference=is_reference,
+                    is_variant=is_variant
+                )
+        elif is_variant and is_a:
+            probabilities_is_a = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_a)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_variant and is_c:
+            probabilities_is_c = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_c)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_variant and is_g:
+            probabilities_is_g = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_g)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_variant and is_t:
+            probabilities_is_t = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_t)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        else:
+            print('ERROR')
+
     else:
-        print('ERROR')
+        if is_reference and is_a:
+            probabilities_is_a = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_a)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_reference and is_c:
+            probabilities_is_c = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_c)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_reference and is_g:
+            probabilities_is_g = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_g)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_reference and is_t:
+            probabilities_is_t = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_t)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_variant and is_i:
+            probabilities_is_i = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_i)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        elif is_variant and is_d:
+            probabilities_is_d = p_is_acgt_value
+            quality_score = quality_score_from(probabilities_is_d)
+            filtration_value = filtration_value_from(
+                quality_score_for_pass=output_config.quality_score_for_pass,
+                quality_score=quality_score,
+                is_reference=is_reference,
+                is_variant=is_variant,
+            )
+        else:
+            print('ERROR')
 
     input_list_forward_acgt_count_ori = eval(input_forward_acgt_count_ori)
     input_list_reverse_acgt_count_ori = eval(input_reverse_acgt_count_ori)
@@ -462,7 +605,7 @@ def call_variants_from_probability(args):
         is_show_reference=args.show_ref,
         quality_score_for_pass=args.qual,
         pileup=args.pileup,
-        enable_indel_calling=args.enable_indel_calling
+        disable_indel_calling=args.disable_indel_calling
     )
 
     platform = args.platform
@@ -479,9 +622,9 @@ def call_variants_from_probability(args):
                            sample_name=args.sample_name,
                            )
 
-    logging.info("[INFO] Calling tumor-only somatic variants ...")
-    variant_call_start_time = time()
     prediction_path = args.predict_fn
+    logging.info("[INFO] Calling tumor-only somatic variants from {} ...".format(prediction_path.split('/')[-1]))
+    variant_call_start_time = time()
 
     if prediction_path != "PIPE":
         if not os.path.exists(prediction_path):
@@ -497,73 +640,176 @@ def call_variants_from_probability(args):
 
     likelihood_data_info_list = []
 
-    likelihood_a_na = likelihood_data[:10]
-    likelihood_c_nc = likelihood_data[10:20]
-    likelihood_g_ng = likelihood_data[20:30]
-    likelihood_t_nt = likelihood_data[30:40]
+    if args.disable_indel_calling:
+        likelihood_a_na = likelihood_data[:10]
+        likelihood_c_nc = likelihood_data[10:20]
+        likelihood_g_ng = likelihood_data[20:30]
+        likelihood_t_nt = likelihood_data[30:40]
 
-    likelihood_a_points = likelihood_data[40:41].flatten()[:-1]
-    likelihood_na_points = likelihood_data[41:42].flatten()[:-1]
-    likelihood_c_points = likelihood_data[42:43].flatten()[:-1]
-    likelihood_nc_points = likelihood_data[43:44].flatten()[:-1]
-    likelihood_g_points = likelihood_data[44:45].flatten()[:-1]
-    likelihood_ng_points = likelihood_data[45:46].flatten()[:-1]
-    likelihood_t_points = likelihood_data[46:47].flatten()[:-1]
-    likelihood_nt_points = likelihood_data[47:48].flatten()[:-1]
+        likelihood_a_points = likelihood_data[40:41].flatten()[:-1]
+        likelihood_na_points = likelihood_data[41:42].flatten()[:-1]
+        likelihood_c_points = likelihood_data[42:43].flatten()[:-1]
+        likelihood_nc_points = likelihood_data[43:44].flatten()[:-1]
+        likelihood_g_points = likelihood_data[44:45].flatten()[:-1]
+        likelihood_ng_points = likelihood_data[45:46].flatten()[:-1]
+        likelihood_t_points = likelihood_data[46:47].flatten()[:-1]
+        likelihood_nt_points = likelihood_data[47:48].flatten()[:-1]
 
-    likelihood_a_points_with_zero = np.insert(likelihood_a_points, 0, 0)
-    likelihood_na_points_with_zero = np.insert(likelihood_na_points, 0, 0)
-    likelihood_a_points_with_zero_one = np.insert(likelihood_a_points_with_zero, len(likelihood_a_points_with_zero),
-                                                  1)
-    likelihood_na_points_with_zero_one = np.insert(likelihood_na_points_with_zero,
-                                                   len(likelihood_na_points_with_zero), 1)
+        likelihood_a_points_with_zero = np.insert(likelihood_a_points, 0, 0)
+        likelihood_na_points_with_zero = np.insert(likelihood_na_points, 0, 0)
+        likelihood_a_points_with_zero_one = np.insert(likelihood_a_points_with_zero, len(likelihood_a_points_with_zero),
+                                                      1)
+        likelihood_na_points_with_zero_one = np.insert(likelihood_na_points_with_zero,
+                                                       len(likelihood_na_points_with_zero), 1)
 
-    likelihood_c_points_with_zero = np.insert(likelihood_c_points, 0, 0)
-    likelihood_nc_points_with_zero = np.insert(likelihood_nc_points, 0, 0)
-    likelihood_c_points_with_zero_one = np.insert(likelihood_c_points_with_zero, len(likelihood_c_points_with_zero),
-                                                  1)
-    likelihood_nc_points_with_zero_one = np.insert(likelihood_nc_points_with_zero,
-                                                   len(likelihood_nc_points_with_zero), 1)
+        likelihood_c_points_with_zero = np.insert(likelihood_c_points, 0, 0)
+        likelihood_nc_points_with_zero = np.insert(likelihood_nc_points, 0, 0)
+        likelihood_c_points_with_zero_one = np.insert(likelihood_c_points_with_zero, len(likelihood_c_points_with_zero),
+                                                      1)
+        likelihood_nc_points_with_zero_one = np.insert(likelihood_nc_points_with_zero,
+                                                       len(likelihood_nc_points_with_zero), 1)
 
-    likelihood_g_points_with_zero = np.insert(likelihood_g_points, 0, 0)
-    likelihood_ng_points_with_zero = np.insert(likelihood_ng_points, 0, 0)
-    likelihood_g_points_with_zero_one = np.insert(likelihood_g_points_with_zero, len(likelihood_g_points_with_zero),
-                                                  1)
-    likelihood_ng_points_with_zero_one = np.insert(likelihood_ng_points_with_zero,
-                                                   len(likelihood_ng_points_with_zero), 1)
+        likelihood_g_points_with_zero = np.insert(likelihood_g_points, 0, 0)
+        likelihood_ng_points_with_zero = np.insert(likelihood_ng_points, 0, 0)
+        likelihood_g_points_with_zero_one = np.insert(likelihood_g_points_with_zero, len(likelihood_g_points_with_zero),
+                                                      1)
+        likelihood_ng_points_with_zero_one = np.insert(likelihood_ng_points_with_zero,
+                                                       len(likelihood_ng_points_with_zero), 1)
 
-    likelihood_t_points_with_zero = np.insert(likelihood_t_points, 0, 0)
-    likelihood_nt_points_with_zero = np.insert(likelihood_nt_points, 0, 0)
-    likelihood_t_points_with_zero_one = np.insert(likelihood_t_points_with_zero, len(likelihood_t_points_with_zero),
-                                                  1)
-    likelihood_nt_points_with_zero_one = np.insert(likelihood_nt_points_with_zero,
-                                                   len(likelihood_nt_points_with_zero), 1)
+        likelihood_t_points_with_zero = np.insert(likelihood_t_points, 0, 0)
+        likelihood_nt_points_with_zero = np.insert(likelihood_nt_points, 0, 0)
+        likelihood_t_points_with_zero_one = np.insert(likelihood_t_points_with_zero, len(likelihood_t_points_with_zero),
+                                                      1)
+        likelihood_nt_points_with_zero_one = np.insert(likelihood_nt_points_with_zero,
+                                                       len(likelihood_nt_points_with_zero), 1)
 
-    likelihood_data_info_list.append(likelihood_a_na)
-    likelihood_data_info_list.append(likelihood_c_nc)
-    likelihood_data_info_list.append(likelihood_g_ng)
-    likelihood_data_info_list.append(likelihood_t_nt)
-    likelihood_data_info_list.append(likelihood_a_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_na_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_c_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_nc_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_g_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_ng_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_t_points_with_zero_one)
-    likelihood_data_info_list.append(likelihood_nt_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_a_na)
+        likelihood_data_info_list.append(likelihood_c_nc)
+        likelihood_data_info_list.append(likelihood_g_ng)
+        likelihood_data_info_list.append(likelihood_t_nt)
+        likelihood_data_info_list.append(likelihood_a_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_na_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_c_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_nc_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_g_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_ng_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_t_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_nt_points_with_zero_one)
+
+    else:
+        likelihood_a_na = likelihood_data[:10]
+        likelihood_c_nc = likelihood_data[10:20]
+        likelihood_g_ng = likelihood_data[20:30]
+        likelihood_t_nt = likelihood_data[30:40]
+        likelihood_i_ni = likelihood_data[40:50]
+        likelihood_d_nd = likelihood_data[50:60]
+
+        likelihood_a_points = likelihood_data[60:61].flatten()[:-1]
+        likelihood_na_points = likelihood_data[61:62].flatten()[:-1]
+        likelihood_c_points = likelihood_data[62:63].flatten()[:-1]
+        likelihood_nc_points = likelihood_data[63:64].flatten()[:-1]
+        likelihood_g_points = likelihood_data[64:65].flatten()[:-1]
+        likelihood_ng_points = likelihood_data[65:66].flatten()[:-1]
+        likelihood_t_points = likelihood_data[66:67].flatten()[:-1]
+        likelihood_nt_points = likelihood_data[67:68].flatten()[:-1]
+        likelihood_i_points = likelihood_data[68:69].flatten()[:-1]
+        likelihood_ni_points = likelihood_data[69:70].flatten()[:-1]
+        likelihood_d_points = likelihood_data[70:71].flatten()[:-1]
+        likelihood_nd_points = likelihood_data[71:72].flatten()[:-1]
+
+        likelihood_a_points_with_zero = np.insert(likelihood_a_points, 0, 0)
+        likelihood_na_points_with_zero = np.insert(likelihood_na_points, 0, 0)
+        likelihood_a_points_with_zero_one = np.insert(likelihood_a_points_with_zero, len(likelihood_a_points_with_zero),
+                                                      1)
+        likelihood_na_points_with_zero_one = np.insert(likelihood_na_points_with_zero,
+                                                       len(likelihood_na_points_with_zero), 1)
+
+        likelihood_c_points_with_zero = np.insert(likelihood_c_points, 0, 0)
+        likelihood_nc_points_with_zero = np.insert(likelihood_nc_points, 0, 0)
+        likelihood_c_points_with_zero_one = np.insert(likelihood_c_points_with_zero, len(likelihood_c_points_with_zero),
+                                                      1)
+        likelihood_nc_points_with_zero_one = np.insert(likelihood_nc_points_with_zero,
+                                                       len(likelihood_nc_points_with_zero), 1)
+
+        likelihood_g_points_with_zero = np.insert(likelihood_g_points, 0, 0)
+        likelihood_ng_points_with_zero = np.insert(likelihood_ng_points, 0, 0)
+        likelihood_g_points_with_zero_one = np.insert(likelihood_g_points_with_zero, len(likelihood_g_points_with_zero),
+                                                      1)
+        likelihood_ng_points_with_zero_one = np.insert(likelihood_ng_points_with_zero,
+                                                       len(likelihood_ng_points_with_zero), 1)
+
+        likelihood_t_points_with_zero = np.insert(likelihood_t_points, 0, 0)
+        likelihood_nt_points_with_zero = np.insert(likelihood_nt_points, 0, 0)
+        likelihood_t_points_with_zero_one = np.insert(likelihood_t_points_with_zero, len(likelihood_t_points_with_zero),
+                                                      1)
+        likelihood_nt_points_with_zero_one = np.insert(likelihood_nt_points_with_zero,
+                                                       len(likelihood_nt_points_with_zero), 1)
+
+        likelihood_i_points_with_zero = np.insert(likelihood_i_points, 0, 0)
+        likelihood_ni_points_with_zero = np.insert(likelihood_ni_points, 0, 0)
+        likelihood_i_points_with_zero_one = np.insert(likelihood_i_points_with_zero, len(likelihood_i_points_with_zero),
+                                                      1)
+        likelihood_ni_points_with_zero_one = np.insert(likelihood_ni_points_with_zero,
+                                                       len(likelihood_ni_points_with_zero), 1)
+
+        likelihood_d_points_with_zero = np.insert(likelihood_d_points, 0, 0)
+        likelihood_nd_points_with_zero = np.insert(likelihood_nd_points, 0, 0)
+        likelihood_d_points_with_zero_one = np.insert(likelihood_d_points_with_zero, len(likelihood_d_points_with_zero),
+                                                      1)
+        likelihood_nd_points_with_zero_one = np.insert(likelihood_nd_points_with_zero,
+                                                       len(likelihood_nd_points_with_zero), 1)
+
+        likelihood_data_info_list.append(likelihood_a_na)
+        likelihood_data_info_list.append(likelihood_c_nc)
+        likelihood_data_info_list.append(likelihood_g_ng)
+        likelihood_data_info_list.append(likelihood_t_nt)
+        likelihood_data_info_list.append(likelihood_i_ni)
+        likelihood_data_info_list.append(likelihood_d_nd)
+        likelihood_data_info_list.append(likelihood_a_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_na_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_c_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_nc_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_g_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_ng_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_t_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_nt_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_i_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_ni_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_d_points_with_zero_one)
+        likelihood_data_info_list.append(likelihood_nd_points_with_zero_one)
 
     for row_id, row in enumerate(fo):
         row = row.rstrip().split('\t')
-        chromosome, position, reference_base, tumor_alt_info, input_forward_acgt_count_ori, input_reverse_acgt_count_ori, prediction_a, prediction_c, prediction_g, prediction_t, \
-            prediction_na, prediction_nc, prediction_ng, prediction_nt = row[:15]
-        probabilities_a = [float(item) for item in prediction_a.split()]
-        probabilities_c = [float(item) for item in prediction_c.split()]
-        probabilities_g = [float(item) for item in prediction_g.split()]
-        probabilities_t = [float(item) for item in prediction_t.split()]
-        probabilities_na = [float(item) for item in prediction_na.split()]
-        probabilities_nc = [float(item) for item in prediction_nc.split()]
-        probabilities_ng = [float(item) for item in prediction_ng.split()]
-        probabilities_nt = [float(item) for item in prediction_nt.split()]
+        if args.disable_indel_calling:
+            chromosome, position, reference_base, tumor_alt_info, input_forward_acgt_count_ori, input_reverse_acgt_count_ori, prediction_a, prediction_c, prediction_g, prediction_t, \
+                prediction_na, prediction_nc, prediction_ng, prediction_nt = row[:15]
+            probabilities_a = [float(item) for item in prediction_a.split()]
+            probabilities_c = [float(item) for item in prediction_c.split()]
+            probabilities_g = [float(item) for item in prediction_g.split()]
+            probabilities_t = [float(item) for item in prediction_t.split()]
+            probabilities_na = [float(item) for item in prediction_na.split()]
+            probabilities_nc = [float(item) for item in prediction_nc.split()]
+            probabilities_ng = [float(item) for item in prediction_ng.split()]
+            probabilities_nt = [float(item) for item in prediction_nt.split()]
+            probabilities_i = None
+            probabilities_d = None
+            probabilities_ni = None
+            probabilities_nd = None
+        else:
+            chromosome, position, reference_base, tumor_alt_info, input_forward_acgt_count_ori, input_reverse_acgt_count_ori, prediction_a, prediction_c, prediction_g, prediction_t, prediction_i, prediction_d, \
+                prediction_na, prediction_nc, prediction_ng, prediction_nt, prediction_ni, prediction_nd = row[:19]
+            probabilities_a = [float(item) for item in prediction_a.split()]
+            probabilities_c = [float(item) for item in prediction_c.split()]
+            probabilities_g = [float(item) for item in prediction_g.split()]
+            probabilities_t = [float(item) for item in prediction_t.split()]
+            probabilities_i = [float(item) for item in prediction_i.split()]
+            probabilities_d = [float(item) for item in prediction_d.split()]
+            probabilities_na = [float(item) for item in prediction_na.split()]
+            probabilities_nc = [float(item) for item in prediction_nc.split()]
+            probabilities_ng = [float(item) for item in prediction_ng.split()]
+            probabilities_nt = [float(item) for item in prediction_nt.split()]
+            probabilities_ni = [float(item) for item in prediction_ni.split()]
+            probabilities_nd = [float(item) for item in prediction_nd.split()]
         output_vcf_from_probability(
             chromosome,
             position,
@@ -575,19 +821,24 @@ def call_variants_from_probability(args):
             probabilities_c,
             probabilities_g,
             probabilities_t,
+            probabilities_i,
+            probabilities_d,
             probabilities_na,
             probabilities_nc,
             probabilities_ng,
             probabilities_nt,
+            probabilities_ni,
+            probabilities_nd,
             likelihood_data_info_list,
             output_config=output_config,
-            vcf_writer=vcf_writer
+            vcf_writer=vcf_writer,
+            disable_indel_calling=args.disable_indel_calling
         )
 
     logging.info("[INFO] Total time elapsed: %.2f s" % (time() - variant_call_start_time))
 
     vcf_writer.close()
-    # remove file if on variant in output
+    # remove file if no variant in output
     if os.path.exists(args.call_fn):
         vcf_file = open(args.call_fn, 'r').readlines()
         if not len(vcf_file):
@@ -630,8 +881,8 @@ def main():
                         help="Likelihood matrix data for Bayes' theorem")
 
     # options for advanced users
-    parser.add_argument('--enable_indel_calling', type=str2bool, default=0,
-                        help="EXPERIMENTAL: Call Indel variants, default: disabled")
+    parser.add_argument('--disable_indel_calling', type=str2bool, default=0,
+                        help="EXPERIMENTAL: Disable Indel calling, default: enabled.")
 
     # options for debug purpose
     parser.add_argument('--predict_fn', type=str, default="PIPE",
