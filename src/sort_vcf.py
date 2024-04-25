@@ -73,11 +73,13 @@ def sort_vcf_from_stdin(args):
     """
     Sort vcf file according to variants start position and contig name.
     """
-
+    compress_vcf = args.compress_vcf
     row_count = 0
     header = []
     contig_dict = defaultdict(defaultdict)
     no_vcf_output = True
+
+    print("[INFO] Sorting VCFs...")
     for row in stdin:
         row_count += 1
         if row[0] == '#':
@@ -103,6 +105,10 @@ def sort_vcf_from_stdin(args):
             for pos in all_pos:
                 output.write(contig_dict[contig][pos])
 
+    if compress_vcf:
+        compress_index_vcf(args.output_fn)
+
+    print("[INFO] Finished VCF sorting!")
 
 def sort_vcf_from(args):
     """
