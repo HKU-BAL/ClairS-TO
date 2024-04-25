@@ -58,8 +58,8 @@ def compress_index_vcf(input_vcf):
     proc = subprocess.run('tabix -f -p vcf {}.gz'.format(input_vcf), shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
 
-def mark_low_qual(row, quality_score_for_pass):
-    if row == '' or "RefCall" in row:
+def mark_low_qual(row, platform, quality_score_for_pass, quality_score_for_pass_phaseable, quality_score_for_pass_unphaseable):
+    if row == '' or "RefCall" in row or "LowQual" in row:
         return row
     columns = row.split('\t')
     qual = float(columns[5])
@@ -69,8 +69,17 @@ def mark_low_qual(row, quality_score_for_pass):
             columns[5] = "0.0000"
         else:
             columns[6] = "LowQual"
+    if platform != 'ilmn':
+        phaseable = 'H' in columns[7].split(';')
+        if "PASS" in row and phaseable:
+            if quality_score_for_pass_phaseable and qual < float(quality_score_for_pass_phaseable):
+                columns[6] = "LowQual"
+        if "PASS" in row and not phaseable:
+            if quality_score_for_pass_unphaseable and qual < float(quality_score_for_pass_unphaseable):
+                columns[6] = "LowQual"
 
     return '\t'.join(columns)
+
 
 def update_GQ(columns):
     INFO = columns[8]
@@ -84,13 +93,14 @@ def merge_vcf(args):
     compress_vcf = args.compress_vcf
     platform = args.platform
     cmdline_file = args.cmdline
-    prefer_recall = args.prefer_recall
-
+    cmdline = None
     if cmdline_file is not None and os.path.exists(cmdline_file):
         cmdline = open(cmdline_file).read().rstrip()
 
     max_qual_filter_pileup_calls = args.max_qual_filter_pileup_calls
     quality_score_for_pass = args.qual if args.qual is not None else param.min_thred_qual[platform]
+    quality_score_for_pass_phaseable = args.qual_cutoff_phaseable_region if args.qual_cutoff_phaseable_region is not None else param.min_phaseable_thred_qual[platform]
+    quality_score_for_pass_unphaseable = args.qual_cutoff_unphaseable_region if args.qual_cutoff_unphaseable_region is not None else param.min_unphaseable_thred_qual[platform]
     af_cut_off = args.af if args.af is not None else param.af_dict[platform]
 
     pileup_vcf_reader = VcfReader(vcf_fn=args.pileup_vcf_fn,
@@ -122,15 +132,7 @@ def merge_vcf(args):
 
         if max_qual_filter_pileup_calls is not None:
             if qual < float(max_qual_filter_pileup_calls):
-                if prefer_recall:
-                    columns[5] = columns[5]
-                    columns = update_GQ(columns)
-                    row = '\t'.join(columns) + '\n'
-                    contig_dict[ctg_name][int(pos)] = row
-                    recall_count += 1
-                # added pileup and fa records into output
-                else:
-                    filter_count += 1
+                filter_count += 1
                 continue
             elif platform == 'ilmn':
                 columns[5] = columns[5]
@@ -154,21 +156,12 @@ def merge_vcf(args):
         contig_dict[ctg_name][int(pos)] = row
         no_vcf_output = False
 
-    # append all non_pass pileup variant if need to print ref calls
+    # append all non-pass pileup variants if printing ref calls
     for k, row in pileup_input_variant_dict.items():
         if k[0] not in contig_dict or k[1] not in contig_dict[k[0]]:
             columns = row.strip().split()
             if columns[6] != "NonSomatic" and columns[6] != "RefCall":
-                if prefer_recall:
-                    columns[5] = columns[5]
-                    columns = update_GQ(columns)
-                    row = '\t'.join(columns) + '\n'
-                    contig_dict[k[0]][k[1]] = row
-                    no_vcf_output = False
-                    recall_count += 1
-                    continue
-                else:
-                    columns[5] = "0.0000"
+                columns[5] = "0.0000"
             else:
                 columns[5] = columns[5]
             #update GQ to phred
@@ -186,7 +179,7 @@ def merge_vcf(args):
     contigs_order_list = sorted(contig_dict.keys(), key=lambda x: contigs_order.index(x))
 
     output_vcf_header = pileup_vcf_reader.header
-    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T in the tumor BAM">'
     output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     output_vcf_writer = VcfWriter(vcf_fn=args.output_fn,
                                  ctg_name=','.join(list(contig_dict.keys())),
@@ -200,12 +193,13 @@ def merge_vcf(args):
         all_pos = sorted(contig_dict[contig].keys())
         for pos in all_pos:
             #Mark low QUAL
-            row = mark_low_qual(contig_dict[contig][pos], quality_score_for_pass)
+            row = mark_low_qual(contig_dict[contig][pos], platform, quality_score_for_pass, quality_score_for_pass_phaseable, quality_score_for_pass_unphaseable)
             output_vcf_writer.vcf_writer.write(row)
     output_vcf_writer.close()
 
     if compress_vcf:
         compress_index_vcf(args.output_fn)
+
 
 def main():
     parser = ArgumentParser(description="VCF post-processing")
@@ -233,7 +227,16 @@ def main():
 
     # options for advanced users
     parser.add_argument('--qual', type=float, default=None,
-                        help="EXPERIMENTAL: If set, variants Phread quality with >=$qual will be marked 'PASS', or 'LowQual' otherwise")
+                        help="EXPERIMENTAL: If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 12, PacBio HiFi: 8, Illumina: 4")
+
+    parser.add_argument('--qual_cutoff_phaseable_region', type=float, default=None,
+                        help="EXPERIMENTAL: If set, variants called in phaseable regions with >QUAL will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`")
+
+    parser.add_argument('--qual_cutoff_unphaseable_region', type=float, default=None,
+                        help="EXPERIMENTAL: If set, variants called in unphaseable regions with >QUAL will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`")
+
+    parser.add_argument('--disable_indel_calling', type=str2bool, default=False,
+                        help=SUPPRESS)
 
     parser.add_argument('--af', type=float, default=None,
                         help=SUPPRESS)
@@ -242,6 +245,9 @@ def main():
                         help=SUPPRESS)
 
     parser.add_argument('--bed_format', action='store_true',
+                        help=SUPPRESS)
+
+    parser.add_argument('--indel_calling', action='store_true',
                         help=SUPPRESS)
 
     parser.add_argument('--prefer_recall', type=str2bool, default=False,
