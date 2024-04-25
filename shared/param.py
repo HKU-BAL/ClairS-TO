@@ -1,6 +1,6 @@
 # parameters
 caller_name = "clairs_to"
-version = "0.0.2"
+version = "0.1.0"
 
 from itertools import accumulate
 
@@ -20,6 +20,7 @@ min_bq = 0
 min_coverage = 4
 split_bed_size = 10000
 snv_min_af = 0.05
+indel_min_af = 0.05
 tensor_max_depth = 168
 center_padding_depth = 2
 min_rescale_cov = 50
@@ -31,14 +32,16 @@ max_tumor_depth = 84
 ont_tensor_max_depth = 128
 ont_max_depth = ont_tensor_max_depth + center_padding_depth
 min_bq_dict = {'ont': 20, 'ont_r10_dorado_sup_4khz': 20, 'ont_r10_dorado_hac_4khz': 15, 'ont_r10_dorado_sup_5khz': 20, 'ont_r10_guppy_sup_4khz': 20, 'ont_r10_guppy_hac_5khz': 15, 'ont_r10_dorado_4khz': 20, 'ont_r10_dorado_5khz': 20, 'ont_r10_guppy': 20, 'ont_r10_guppy_4khz': 20, 'ont_r10_guppy_5khz': 15, 'ilmn': 0, 'hifi': 20, 'hifi_revio': 20}
-min_thred_qual = {'ont': 8, 'ont_r10': 8, 'ont_r9': 8, 'ilmn': 2, 'hifi': 4, 'hifi_sequel2': 4, 'hifi_revio': 4}
-best_thred_qual = {'ont': 15, 'ont_r10': 15, 'ont_r9': 15, 'ilmn': 4, 'hifi': 8, 'hifi_sequel2': 8, 'hifi_revio': 8}
+min_thred_qual = {'ont': 12, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
+min_phaseable_thred_qual = {'ont': 12, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
+min_unphaseable_thred_qual = {'ont': 14, 'ilmn': 4, 'hifi': 12, 'hifi_revio': 12}
+best_thred_qual = {'ont': 14, 'ilmn': 6, 'hifi': 12, 'hifi_revio': 12}
 ont_max_tumor_depth = 75
 
 matrix_depth_dict = {'ont': ont_max_depth, 'ilmn': max_depth, 'hifi': 130}
 tumor_matrix_depth_dict = {'ont': ont_max_tumor_depth, 'ilmn': max_tumor_depth, 'hifi': 64}
 phase_tumor = {'ont': True, 'ilmn': False, 'hifi': True}
-qual_dict = {'ont': 8, 'ilmn': 14, 'hifi': 8}
+qual_dict = {'ont': 8, 'ilmn': 12, 'hifi': 8}
 af_dict = {'ont': 0.05, 'ilmn': 0.05, 'hifi': 0.05}
 
 pileup_channel = ['A', 'C', 'G', 'T', 'I', 'I1', 'D', 'D1', '*', 'a', 'c', 'g', 't', 'i', 'i1', 'd', 'd1', '#']
