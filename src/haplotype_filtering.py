@@ -12,10 +12,13 @@ import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
-HIGH_QUAL = 11
-LOW_AF = 0.1
+HIGH_QUAL_SNV = 12
+HIGH_QUAL_INDEL = 20
+LOW_AF_SNV = 0.1
+LOW_AF_INDEL = 0.3
 min_hom_germline_af = 0.75
-eps = 0.2
+eps = 0.5
+eps_rse = 0.2
 
 def delete_lines_after(target_str, delimiter):
     lines = target_str.split('\n')
@@ -29,6 +32,61 @@ def delete_lines_after(target_str, delimiter):
     return processed_str
 
 
+def Binominal(n, k):
+    if k > n:
+        return 0
+    result = 1
+    if k > n - k:
+        k = n - k
+    i = 1
+    while i <= k:
+        result *= n
+        result //= i
+        n -= 1
+        i += 1
+
+    return result
+
+
+def fisher_exact(table):
+    a, b, c, d = table[0][0], table[0][1], table[1][0], table[1][1]
+    if a == b == c == d:
+        return 1.0
+
+    p = t = Binominal(a + b, a) * Binominal(c + d, c) / Binominal(a + b + c + d, a + c)
+
+    p_left_side = 0.0
+    curP = float(t)
+    while (a > 0 and d > 0):
+        curP *= a * d
+        a -= 1
+        b += 1
+        c += 1
+        d -= 1
+        curP /= b * c
+        if curP <= t:
+            p_left_side += curP
+
+    p += p_left_side
+
+    a, b, c, d = table[0][0], table[0][1], table[1][0], table[1][1]
+    p_right_side = 0.0
+    curP = float(t)
+    while (b > 0 and c > 0):
+        curP *= b * c
+        a += 1
+        b -= 1
+        c -= 1
+        d += 1
+        curP /= a * d
+        if curP <=  t:
+            p_right_side += curP
+
+    p += p_right_side
+
+    return p
+
+
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -37,7 +95,7 @@ def get_base_list(columns):
     read_end_set = set()
     read_start_set = set()
     while base_idx < len(pileup_bases):
-        base = pileup_bases[base_idx].upper()
+        base = pileup_bases[base_idx]
         if base == '+' or base == '-':
             base_idx += 1
             advance = 0
@@ -48,7 +106,7 @@ def get_base_list(columns):
                     base_idx += 1
                 else:
                     break
-            base_list[-1][1] = base + pileup_bases[base_idx: base_idx + advance].upper()  # add indel seq
+            base_list[-1][1] = base + pileup_bases[base_idx: base_idx + advance]  # add indel seq
             base_idx += advance - 1
 
         elif base in "ACGTNacgtn#*":
@@ -68,22 +126,26 @@ def get_base_list(columns):
 def haplotype_filter_per_pos(args):
     pos = args.pos
     ctg_name = args.ctg_name
+    ref_base = args.ref_base
     alt_base = args.alt_base
     tumor_bam_fn = args.tumor_bam_fn
     ref_fn = args.ref_fn
     samtools = args.samtools
-    min_mq = args.min_mq
     min_bq = args.min_bq
+    min_mq = args.min_mq
     debug = args.debug
     max_co_exist_read_num = args.min_alt_coverage
-
-    pass_hap = True
+    is_snp = len(ref_base) == 1 and len(alt_base) == 1
+    is_ins = len(ref_base) == 1 and len(alt_base) > 1
+    is_del = len(ref_base) > 1 and len(alt_base) == 1
     pass_hetero = True
     pass_homo = True
     pass_hetero_both_side = True
     pass_read_start_end = True
     pass_bq = True
+    pass_mq = True
     pass_co_exist = True
+    pass_strand_bias = True
     match_count, ins_length = 0, 0
     hetero_germline_set = set()
     homo_germline_set = set()
@@ -102,11 +164,10 @@ def haplotype_filter_per_pos(args):
     flanking = args.flanking
 
     ctg_range = "{}:{}-{}".format(ctg_name, pos - flanking, pos + flanking + 1)
-    samtools_command = "{} mpileup  --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-QNAME --output-extra HP ".format(
+    samtools_command = "{} mpileup  --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME --output-extra HP ".format(
         samtools, min_mq, min_bq, ctg_range)
 
     tumor_samtools_command = samtools_command + tumor_bam_fn
-
 
     reference_sequence = reference_sequence_from(
         samtools_execute_command=samtools,
@@ -121,60 +182,105 @@ def haplotype_filter_per_pos(args):
     all_read_start_end_set = set()
     ALL_HAP_LIST = [0, 0, 0]
     HAP_LIST = [0, 0, 0]
-
+    ALL_HAP_FORWARD_LIST = [0, 0, 0]
+    ALL_HAP_REVERSE_LIST = [0, 0, 0]
+    HAP_FORWARD_LIST = [0, 0, 0]
+    HAP_REVERSE_LIST = [0, 0, 0]
+    alt_base_read_name_set = set()
     homo_germline_pos_set = set([int(item[0]) for item in homo_germline_set])
     hetero_germline_pos_set = set([int(item[0]) for item in hetero_germline_set])
 
-    samtools_mpileup_tumor_process = subprocess_popen(shlex.split(tumor_samtools_command), stderr=subprocess.PIPE,)
+    samtools_mpileup_tumor_process = subprocess_popen(shlex.split(tumor_samtools_command), stderr=subprocess.PIPE)
     for row in samtools_mpileup_tumor_process.stdout:
         columns = row.split('\t')
-        read_name_list = columns[6].split(',')
+        read_name_list = columns[7].split(',')
+
+        base_counter, base_list, read_start_end_set = get_base_list(columns)
+
+        for b_idx, base in enumerate(base_list):
+            if base[0] == '#' or (base[0] >= 'a' and base[0] <= 'z'):
+                read_name_list[b_idx] += '_1'  # reverse
+            else:
+                read_name_list[b_idx] += '_0'  # forward
+
+        base_list = [[''.join(item[0]).upper()] + [item[1]] for item in base_list]
 
         p = int(columns[1])
         ctg = columns[0]
         ctg = p if args.ctg_name is not None else (ctg, p)
         if ctg in hetero_germline_pos_set or p == pos:
-            phasing_info = columns[7].split(',')
+            phasing_info = columns[8].strip('\n').split(',')
             for hap_idx, hap in enumerate(phasing_info):
                 if hap in '12' and read_name_list[hap_idx] not in hap_dict:
                     hap_dict[read_name_list[hap_idx]] = int(hap)
 
-        base_counter, base_list, read_start_end_set = get_base_list(columns)
-
         # make union of all read start and end
-        if len(read_start_end_set) >= len(base_list) * eps:
+        if len(read_start_end_set) >= len(base_list) * eps_rse:
             all_read_start_end_set = all_read_start_end_set.union(
                 set([read_name_list[r_idx] for r_idx in read_start_end_set]))
 
         pos_dict[p] = dict(zip(read_name_list, base_list))
-        ref_base = reference_sequence[p - pos + flanking]
+        center_ref_base = reference_sequence[p - pos + flanking]
 
-        # discard low BQ variants
+        # discard low BQ & MQ variants
         average_min_bq = param.ont_min_bq
+        average_min_mq = param.min_mq
         if p == pos:
             bq_list = [ord(qual) - 33 for qual in columns[5]]
-            alt_base_bq_set = [bq for key, value, bq in zip(read_name_list, base_list, bq_list) if
-                               ''.join(value) == alt_base]
+            mq_list = [ord(qual) - 33 for qual in columns[6]]
+            if is_snp:
+                alt_base_bq_set = [bq for key, value, bq in zip(read_name_list, base_list, bq_list) if
+                                   ''.join(value) == alt_base]
+                alt_base_mq_set = [mq for key, value, mq in zip(read_name_list, base_list, mq_list) if
+                                   ''.join(value) == alt_base]
+            elif is_ins:
+                alt_base_bq_set = [bq for key, value, bq in zip(read_name_list, base_list, bq_list) if
+                                   ''.join(value).replace('+', '').upper() == alt_base and '+' in ''.join(value)]
+                alt_base_mq_set = [mq for key, value, mq in zip(read_name_list, base_list, mq_list) if
+                                   ''.join(value).replace('+', '').upper() == alt_base and '+' in ''.join(value)]
+            elif is_del:
+                alt_base_bq_set = [bq for key, value, bq in zip(read_name_list, base_list, bq_list) if
+                                   len(ref_base) == len(value[1]) and '-' in value[1]]
+                alt_base_mq_set = [mq for key, value, mq in zip(read_name_list, base_list, mq_list) if
+                                   len(ref_base) == len(value[1]) and '-' in value[1]]
 
-            if len(alt_base_bq_set) > 0 and sum(alt_base_bq_set) / len(alt_base_bq_set) <= average_min_bq and float(args.qual) < HIGH_QUAL:
+            if len(alt_base_bq_set) > 0 and sum(alt_base_bq_set) / len(alt_base_bq_set) <= average_min_bq and float(args.qual) < HIGH_QUAL_SNV:
                 pass_bq = False
+
+            if len(alt_base_mq_set) > 0 and sum(alt_base_mq_set) / len(alt_base_mq_set) <= average_min_mq and float(args.qual) < HIGH_QUAL_SNV:
+                pass_mq = False
 
             for rn in read_name_list:
                 ALL_HAP_LIST[hap_dict[rn]] += 1
+                if rn.endswith('0'):
+                    ALL_HAP_FORWARD_LIST[hap_dict[rn]] += 1
+                elif rn.endswith('1'):
+                    ALL_HAP_REVERSE_LIST[hap_dict[rn]] += 1
 
-            alt_base_read_name_set = set(
-                [key for key, value in zip(read_name_list, base_list) if ''.join(value) == alt_base])
+            if is_snp:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if ''.join(value) == alt_base])
+            elif is_ins:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if ''.join(value).replace('+', '').upper() == alt_base and '+' in ''.join(value)])
+            elif is_del:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if len(ref_base) == len(value[1]) and '-' in value[1]])
+
             for rn in alt_base_read_name_set:
                 HAP_LIST[hap_dict[rn]] += 1
+                if rn.endswith('0'):
+                    HAP_FORWARD_LIST[hap_dict[rn]] += 1
+                elif rn.endswith('1'):
+                    HAP_REVERSE_LIST[hap_dict[rn]] += 1
 
-        if len(base_counter) == 1 and base_counter[ref_base] > 0:
+        if len(base_counter) == 1 and base_counter[center_ref_base] > 0:
             continue
         pos_counter_dict[p] = base_counter
 
     samtools_mpileup_tumor_process.stdout.close()
     samtools_mpileup_tumor_process.wait()
 
-    alt_base_read_name_set = set([key for key, value in pos_dict[pos].items() if ''.join(value) == alt_base])
     # near to read start end and have high overlap
     if len(all_read_start_end_set.intersection(alt_base_read_name_set)) >= 0.3 * len(alt_base_read_name_set):
         pass_read_start_end = False
@@ -185,8 +291,11 @@ def haplotype_filter_per_pos(args):
     MAX = max(hp1, hp2)
     MIN = min(hp1, hp2)
     af = float(args.af)
-    if af < LOW_AF and float(args.qual) < HIGH_QUAL:
-        if hp1 * hp2 > 0 and MAX / MIN <= 10:
+    if is_snp and af < LOW_AF_SNV and float(args.qual) < HIGH_QUAL_SNV:
+        if hp1 * hp2 > 0 and (MIN > args.min_alt_coverage or MAX / MIN <= 10):
+            pass_hetero_both_side = False
+    elif not is_snp and af < LOW_AF_INDEL and float(args.qual) < HIGH_QUAL_INDEL:
+        if hp1 * hp2 > 0 and (MIN > args.min_alt_coverage or MAX / MIN <= 10):
             pass_hetero_both_side = False
 
     is_phasable = hp1 * hp2 == 0 or (MAX / MIN >= 5 and (hp1 > args.min_alt_coverage or hp2 > args.min_alt_coverage))
@@ -202,7 +311,7 @@ def haplotype_filter_per_pos(args):
     for p, rb_dict in pos_dict.items():
         rb = reference_sequence[p - pos + flanking]
         read_alt_dict = pos_dict[p]
-        if p == pos or p in homo_germline_pos_set or p in hetero_germline_pos_set:
+        if p == pos:
             continue
 
         ins_length += sum(
@@ -222,7 +331,7 @@ def haplotype_filter_per_pos(args):
         alt_list = []
 
         for key in inter_set:
-            base = ''.join(read_alt_dict[key])
+            base = ''.join(read_alt_dict[key]).upper()
             if base != rb and base not in '#*':
                 alt_list.append(base)
         alt_base_counter = sorted(Counter(alt_list).items(), key=lambda x: x[1], reverse=True)
@@ -236,6 +345,7 @@ def haplotype_filter_per_pos(args):
         # cal all alt count in current position
         if pos_counter_dict[p][alt_base_counter[0][0]] >= alt_base_counter[0][1] * upper_bound:
             continue
+
         match_count += 1
 
     if hap_index > 0:
@@ -321,23 +431,34 @@ def haplotype_filter_per_pos(args):
             break
 
     depth = sum(ALL_HAP_LIST) if sum(ALL_HAP_LIST) > 0 else 1
-    if match_count > max_co_exist_read_num or (ins_length / depth > 6 and float(args.qual) < HIGH_QUAL):
+    if match_count >= max_co_exist_read_num or (ins_length / depth > 3 and float(args.qual) < HIGH_QUAL_INDEL):
         pass_co_exist = False
-
-    pass_hap = pass_hap and pass_hetero and pass_homo and pass_hetero_both_side and pass_read_start_end and pass_bq and pass_co_exist
 
     all_hp0, all_hp1, all_hp2 = ALL_HAP_LIST
     hp0, hp1, hp2 = HAP_LIST
     phaseable = all_hp1 * all_hp2 > 0 and hp1 * hp2 == 0 and (int(hp1) > args.min_alt_coverage or int(hp2) > args.min_alt_coverage)
 
-    if debug:
-        info_list = [str(item) for item in [pass_hetero, pass_homo, pass_hetero_both_side, pass_read_start_end, pass_bq, pass_co_exist] + ALL_HAP_LIST + HAP_LIST]
-        print(' '.join([ctg_name, str(pos), str(pass_hap), str(phaseable)] + info_list))
-    else:
-        print(' '.join([ctg_name, str(pos), str(pass_hap), str(phaseable)]))
+    a0 = sum(HAP_FORWARD_LIST)
+    a1 = sum(HAP_REVERSE_LIST)
+    r0 = sum([x - y for x, y in zip(ALL_HAP_FORWARD_LIST, HAP_FORWARD_LIST)])
+    r1 = sum([x - y for x, y in zip(ALL_HAP_REVERSE_LIST, HAP_REVERSE_LIST)])
+
+    base_count_table = [[a0, r0], [a1, r1]]
+    p_value = fisher_exact(base_count_table)
+    if is_snp and p_value < 0.001 or (a0 == 0 or a1 == 0):
+            pass_strand_bias = False
+    elif not is_snp and p_value < 0.01 or (a0 == 0 or a1 == 0):
+            pass_strand_bias = False
+
+    pass_hap = (pass_hetero and pass_homo and pass_hetero_both_side and pass_read_start_end and pass_bq and pass_mq and pass_co_exist and pass_strand_bias)
+
+    print(' '.join([ctg_name, str(pos), str(pass_hap), str(phaseable), str(pass_hetero), str(pass_homo),
+                        str(pass_read_start_end), str(pass_bq), str(pass_mq), str(pass_co_exist), str(pass_hetero_both_side), str(pass_strand_bias), str(round(p_value, 5))]))
 
 
-def update_filter_info(args, key, row_str, phasable_set, fail_set_list):
+def update_filter_info(args, key, row_str, phasable_set, fail_set, fail_pass_hetero_set, fail_pass_homo_set,
+                       fail_pass_read_start_end_set, fail_pass_bq_set, fail_pass_mq_set, fail_pass_co_exist_set,
+                       fail_pass_hetero_both_side_set, fail_pass_strand_bias_set, strand_bias_p_value_dict):
     ctg_name = key[0] if args.ctg_name is None else args.ctg_name
     pos = key[1] if args.ctg_name is None else key
     k = (ctg_name, pos)
@@ -347,19 +468,37 @@ def update_filter_info(args, key, row_str, phasable_set, fail_set_list):
     phaseable = k in phasable_set
 
     if phaseable:
-        columns[7] = 'H'
-    for idx, fail_pos_set in enumerate(fail_set_list):
-        if k in fail_pos_set:
-            columns[5] = '0.0000'
-            if args.debug:
-                #0 coeixst 1 indel 2 fail het 3 fail homo 4 het both 5 start end 6 bq
-                columns[6] = columns[6].replace('PASS', 'LowQual')
-                columns[6] += ' ' + str(idx)
-            else:
-                columns[6] = "LowQual"
+        columns[7] = 'H;' + columns[7]
 
-            is_candidate_filtered = 1
-            continue
+    if k in fail_set:
+        columns[5] = '0.0000'
+        columns[6] = "LowQual"
+        is_candidate_filtered = 1
+    if k in fail_pass_bq_set:
+        columns[6] += ";"
+        columns[6] += "LowAltBQ"
+    if k in fail_pass_mq_set:
+        columns[6] += ";"
+        columns[6] += "LowAltMQ"
+    if k in fail_pass_read_start_end_set:
+        columns[6] += ";"
+        columns[6] += "ReadStartEnd"
+    if k in fail_pass_co_exist_set:
+        columns[6] += ";"
+        columns[6] += "VariantCluster"
+    if k in fail_pass_hetero_set or k in fail_pass_homo_set:
+        columns[6] += ";"
+        columns[6] += "NoAncestry"
+    if k in fail_pass_hetero_both_side_set:
+        columns[6] += ";"
+        columns[6] += "MultiHap"
+    if k in fail_pass_strand_bias_set:
+        columns[6] += ";"
+        columns[6] += "StrandBias"
+    if k in strand_bias_p_value_dict.keys():
+        strand_bias_p_value = strand_bias_p_value_dict[k]
+        columns[7] += ";"
+        columns[7] += "SB={}".format(strand_bias_p_value)
 
     row_str = '\t'.join(columns)
 
@@ -367,7 +506,6 @@ def update_filter_info(args, key, row_str, phasable_set, fail_set_list):
 
 
 def haplotype_filter(args):
-
     ctg_name = args.ctg_name
     threads = args.threads
     threads_low = max(1, int(threads * 4 / 5))
@@ -377,50 +515,26 @@ def haplotype_filter(args):
     flanking = args.flanking
     output_dir = args.output_dir
     max_co_exist_read_num = args.min_alt_coverage
+    is_indel = args.is_indel
     if not os.path.exists(output_dir):
         subprocess.run("mkdir -p {}".format(output_dir), shell=True)
 
-    pileup_output_vcf_fn = os.path.join(output_dir, "pileup_filtering.vcf")
+    pileup_output_vcf_fn = args.output_vcf_fn
     if not apply_haplotype_filtering:
         subprocess.run("ln -sf {} {}".format(pileup_vcf_fn, pileup_output_vcf_fn), shell=True)
         return
 
-    variant_dict = defaultdict(Position)
-    if args.is_happy_format:
-        with open(germline_vcf_fn) as f:
-            for row in f:
-                if row.startswith('#'):
-                    continue
-                columns = row.rstrip().split('\t')
-                ctg, pos = columns[0], int(columns[1])
-                last_column = columns[10]
-                genotype = last_column.split(":")[0].replace("/", "|").replace(".", "0").split("|")
-                if len(genotype) == 1:
-                    genotype_1 = genotype[0]
-                    genotype_2 = 3
-                else:
-                    genotype_1, genotype_2 = genotype
-                key = (ctg, pos) if ctg_name is None else pos
-                variant_dict[key] = Position(ctg_name=ctg,
-                                             pos=pos,
-                                             ref_base=columns[3],
-                                             alt_base=columns[4].split(','),
-                                             genotype1=int(genotype_1),
-                                             genotype2=int(genotype_2))
-
-    else:
-        germine_input_vcf_reader = VcfReader(vcf_fn=germline_vcf_fn,
-                                             ctg_name=ctg_name,
-                                             show_ref=False,
-                                             keep_row_str=False,
-                                             filter_tag="PASS",
-                                             save_header=False,
-                                             skip_genotype=False)
-        germine_input_vcf_reader.read_vcf()
-        germline_input_variant_dict = germine_input_vcf_reader.variant_dict
+    germine_input_vcf_reader = VcfReader(vcf_fn=germline_vcf_fn,
+                                         ctg_name=ctg_name,
+                                         show_ref=False,
+                                         keep_row_str=False,
+                                         filter_tag="PASS",
+                                         save_header=False,
+                                         skip_genotype=False)
+    germine_input_vcf_reader.read_vcf()
+    germline_input_variant_dict = germine_input_vcf_reader.variant_dict
 
     germline_gt_list = []
-    # only keep homo germline
     for key in list(germline_input_variant_dict.keys()):
         if sum(germline_input_variant_dict[key].genotype) == 1:
             germline_gt_list.append((key, 1))
@@ -431,7 +545,7 @@ def haplotype_filter(args):
                                  ctg_name=ctg_name,
                                  show_ref=args.show_ref,
                                  keep_row_str=True,
-                                 discard_indel=True,
+                                 discard_indel=False if is_indel else True,
                                  filter_tag=args.input_filter_tag,
                                  save_header=True,
                                  keep_af=True)
@@ -447,7 +561,7 @@ def haplotype_filter(args):
         input_variant_dict[k] = v
 
     output_vcf_header = input_vcf_reader.header
-    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T">'
+    last_format_line = '##FORMAT=<ID=TU,Number=1,Type=Integer,Description="Count of T in the tumor BAM">'
     output_vcf_header = delete_lines_after(output_vcf_header, last_format_line)
     p_vcf_writer = VcfWriter(vcf_fn=pileup_output_vcf_fn,
                              ctg_name=ctg_name,
@@ -455,7 +569,10 @@ def haplotype_filter(args):
                              header=output_vcf_header,
                              show_ref_calls=True)
 
-    hap_info_output_path = os.path.join(output_dir, "HAP_INFO")
+    if not is_indel:
+        hap_info_output_path = os.path.join(output_dir, "HAP_INFO_SNV")
+    else:
+        hap_info_output_path = os.path.join(output_dir, "HAP_INFO_INDEL")
     with open(hap_info_output_path, 'w') as f:
         for key, POS in input_variant_dict.items():
             ctg_name = args.ctg_name if args.ctg_name is not None else key[0]
@@ -473,7 +590,7 @@ def haplotype_filter(args):
                     else:
                         homo_flanking_list.append('-'.join([str(p), str(alt_base)]))
             POS.extra_infos = [set(hetero_flanking_list), set(homo_flanking_list)]
-            info_list = [ctg_name, str(pos), POS.alternate_bases[0], str(POS.af), str(POS.qual), \
+            info_list = [ctg_name, str(pos), POS.reference_bases, POS.alternate_bases[0], str(POS.af), str(POS.qual), \
                          ','.join(hetero_flanking_list), ','.join(homo_flanking_list)]
             f.write(' '.join(info_list) + '\n')
 
@@ -483,11 +600,12 @@ def haplotype_filter(args):
     parallel_command = "{} -C ' ' -j{} {} {} haplotype_filtering".format(args.parallel, threads_low, args.pypy3, main_entry)
     parallel_command += " --ctg_name {1}"
     parallel_command += " --pos {2}"
-    parallel_command += " --alt_base {3}"
-    parallel_command += " --af {4}"
-    parallel_command += " --qual {5}"
-    parallel_command += " --hetero_info {6}"
-    parallel_command += " --homo_info {7}"
+    parallel_command += " --ref_base {3}"
+    parallel_command += " --alt_base {4}"
+    parallel_command += " --af {5}"
+    parallel_command += " --qual {6}"
+    parallel_command += " --hetero_info {7}"
+    parallel_command += " --homo_info {8}"
     parallel_command += " --samtools " + str(args.samtools)
     parallel_command += " --tumor_bam_fn " + str(args.tumor_bam_fn)
     parallel_command += " --ref_fn " + str(args.ref_fn)
@@ -498,18 +616,52 @@ def haplotype_filter(args):
     total_num = 0
     phasable_set = set()
     fail_set = set()
+    fail_pass_hetero_set = set()
+    fail_pass_homo_set = set()
+    fail_pass_read_start_end_set = set()
+    fail_pass_bq_set = set()
+    fail_pass_mq_set = set()
+    fail_pass_co_exist_set = set()
+    fail_pass_hetero_both_side_set = set()
+    fail_pass_strand_bias_set = set()
+    strand_bias_p_value_dict = dict()
 
     for row in haplotype_filter_process.stdout:
         columns = row.rstrip().split()
         if len(columns) < 4:
             continue
         total_num += 1
-        ctg_name, pos, pass_hap, phasable = columns[:4]
+        ctg_name, pos, pass_hap, phasable, pass_hetero, pass_homo, pass_read_start_end, pass_bq, pass_mq, pass_co_exist, pass_hetero_both_side, pass_strand_bias, strand_bias_p_value = columns[:13]
         pos = int(pos)
         pass_hap = str2bool(pass_hap)
+        pass_hetero = str2bool(pass_hetero)
+        pass_homo = str2bool(pass_homo)
+        pass_read_start_end = str2bool(pass_read_start_end)
+        pass_bq = str2bool(pass_bq)
+        pass_mq = str2bool(pass_mq)
+        pass_co_exist = str2bool(pass_co_exist)
+        pass_hetero_both_side = str2bool(pass_hetero_both_side)
+        pass_strand_bias = str2bool(pass_strand_bias)
         phasable = str2bool(phasable)
         if not pass_hap:
             fail_set.add((ctg_name, pos))
+        if not pass_hetero:
+            fail_pass_hetero_set.add((ctg_name, pos))
+        if not pass_homo:
+            fail_pass_homo_set.add((ctg_name, pos))
+        if not pass_read_start_end:
+            fail_pass_read_start_end_set.add((ctg_name, pos))
+        if not pass_bq:
+            fail_pass_bq_set.add((ctg_name, pos))
+        if not pass_mq:
+            fail_pass_mq_set.add((ctg_name, pos))
+        if not pass_co_exist:
+            fail_pass_co_exist_set.add((ctg_name, pos))
+        if not pass_hetero_both_side:
+            fail_pass_hetero_both_side_set.add((ctg_name, pos))
+        if not pass_strand_bias:
+            fail_pass_strand_bias_set.add((ctg_name, pos))
+        strand_bias_p_value_dict[(ctg_name, pos)] = strand_bias_p_value
         if phasable:
             phasable_set.add((ctg_name, pos))
         if total_num > 0 and total_num % 1000 == 0:
@@ -518,16 +670,23 @@ def haplotype_filter(args):
     haplotype_filter_process.stdout.close()
     haplotype_filter_process.wait()
 
-    fail_set_list = [fail_set]
-
     for key in sorted(pileup_variant_dict.keys()):
         row_str = pileup_variant_dict[key].row_str.rstrip()
-        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, phasable_set, fail_set_list)
+        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, phasable_set, fail_set, fail_pass_hetero_set,
+                       fail_pass_homo_set, fail_pass_read_start_end_set, fail_pass_bq_set, fail_pass_mq_set, fail_pass_co_exist_set,
+                       fail_pass_hetero_both_side_set, fail_pass_strand_bias_set, strand_bias_p_value_dict)
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     p_vcf_writer.close()
 
-    print("[INFO] Total input calls: {}, filtered by haplotype match {}".format(len(input_variant_dict), len(fail_set)))
+    print("[INFO] Total input calls: {}, filtered by all hard filers: {}".format(len(input_variant_dict), len(fail_set)))
+    print("[INFO] Total input calls: {}, filtered by low alt bq: {}".format(len(input_variant_dict), len(fail_pass_bq_set)))
+    print("[INFO] Total input calls: {}, filtered by low alt mq: {}".format(len(input_variant_dict),len(fail_pass_mq_set)))
+    print("[INFO] Total input calls: {}, filtered by read start and end: {}".format(len(input_variant_dict), len(fail_pass_read_start_end_set)))
+    print("[INFO] Total input calls: {}, filtered by variant cluster: {}".format(len(input_variant_dict), len(fail_pass_co_exist_set)))
+    print("[INFO] Total input calls: {}, filtered by no ancestry: {}".format(len(input_variant_dict), len(fail_pass_hetero_set) + len(fail_pass_homo_set)))
+    print("[INFO] Total input calls: {}, filtered by multi haplotypes: {}".format(len(input_variant_dict), len(fail_pass_hetero_both_side_set)))
+    print("[INFO] Total input calls: {}, filtered by strand bias: {}".format(len(input_variant_dict), len(fail_pass_strand_bias_set)))
 
 
 def main():
@@ -546,7 +705,7 @@ def main():
                         help="Pileup VCF input")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
-                        help="Full-alignment VCF input")
+                        help="Output vcf file")
 
     parser.add_argument('--germline_vcf_fn', type=str, default=None,
                         help="The 1-based starting position of the sequence to be processed")
@@ -593,6 +752,10 @@ def main():
     parser.add_argument('--max_overlap_distance', type=int, default=100000,
                         help="EXPERIMENTAL: The largest window size for two somatic variants to be considered together for haplotype filtering. Default: %(default)d")
 
+    ## filtering for Indel candidates
+    parser.add_argument('--is_indel', action='store_true',
+                        help=SUPPRESS)
+
     ## test using one position
     parser.add_argument('--test_pos', type=int, default=None,
                         help=SUPPRESS)
@@ -617,6 +780,9 @@ def main():
                         help=SUPPRESS)
 
     parser.add_argument('--pos', type=int, default=None,
+                        help=SUPPRESS)
+
+    parser.add_argument('--ref_base', type=str, default=None,
                         help=SUPPRESS)
 
     parser.add_argument('--alt_base', type=str, default=None,
