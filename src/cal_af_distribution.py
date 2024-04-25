@@ -237,7 +237,7 @@ def main():
     parser.add_argument('--threads', type=int, default=4,
                         help="Max #threads to be used")
 
-    parser.add_argument('--phase_output', type=str2bool, default=False,
+    parser.add_argument('--phase_output', type=str2bool, default=True,
                         help="Output phasing INFO")
 
     parser.add_argument('--samtools', type=str, default="samtools",

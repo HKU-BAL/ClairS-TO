@@ -202,7 +202,8 @@ def compare_vcf(args):
 
         for k, v in input_variant_dict.items():
             columns = v.row_str.rstrip().split('\t')
-            phaseable = columns[7] == 'H'
+            # phaseable = columns[7] == 'H'
+            phaseable = 'H' in columns[7].split(';')
             if phaseable:
                 phasable_count += 1
             else:
@@ -258,7 +259,7 @@ def compare_vcf(args):
 
         if benchmark_indel:
             ref_base, alt_base = input_variant_dict[key].reference_bases, input_variant_dict[key].alternate_bases[0]
-            if len(ref_base) == 1 and len(alt_base) == 1:
+            if len(ref_base) == 1 and len(alt_base) == 1 or len(input_variant_dict[key].alternate_bases) > 1:
                 del input_variant_dict[key]
 
     for key in list(truth_variant_dict.keys()):
@@ -304,6 +305,7 @@ def compare_vcf(args):
     tp_set = set()
     fp_qual_dict = defaultdict(float)
     tp_qual_dict = defaultdict(float)
+    gt_mismatch_count = 0
     for key, vcf_infos in input_variant_dict.items():
         pos = key if args.ctg_name is not None else key[1]
         contig = args.ctg_name if args.ctg_name is not None else key[0]
@@ -323,8 +325,6 @@ def compare_vcf(args):
 
         ref_base = vcf_infos.reference_bases
         alt_base = vcf_infos.alternate_bases[0]
-        # if alt_base == '.':
-        #     alt_base = ref_base
         genotype = vcf_infos.genotype
         qual = vcf_infos.qual
         try:
@@ -359,6 +359,8 @@ def compare_vcf(args):
                 continue
 
             genotype_match = skip_genotyping or (truth_genotype == genotype)
+            if not genotype_match:
+                gt_mismatch_count += 1
             if truth_ref_base == ref_base and truth_alt_base == alt_base and genotype_match:
                 tp_snv = tp_snv + 1 if is_snv else tp_snv
                 tp_ins = tp_ins + 1 if is_ins else tp_ins
@@ -388,7 +390,8 @@ def compare_vcf(args):
                     fp_fn_set.add(key)
 
             truth_set.add(key)
-
+    if not skip_genotyping:
+        print('[INFO] Genotype mismatch count/Total fp_fn count: {}/{}'.format(gt_mismatch_count, len(fp_fn_set)))
     for key, vcf_infos in truth_variant_dict.items():
         pos = key if args.ctg_name is not None else key[1]
         contig = args.ctg_name if args.ctg_name is not None else key[0]

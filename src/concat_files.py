@@ -49,7 +49,7 @@ def concat_files(args):
         output_fn = os.path.join(output_dir, output_fn)
 
     if is_snv and output_fn is None:
-        output_fn = os.path.join(output_dir, "CANDIDATES_FILES")
+        output_fn = os.path.join(output_dir, "SNV_CANDIDATES_FILES")
     elif is_indel and output_fn is None:
         output_fn = os.path.join(output_dir, "INDEL_CANDIDATES_FILES")
 
