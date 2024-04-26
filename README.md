@@ -66,7 +66,8 @@ After following [installation](#installation), you can run ClairS-TO with one co
 ```bash
 ./run_clairs_to -T tumor.bam -R ref.fa -o output -t 8 -p ont_r10_guppy_sup_4khz
 
-## Final output file: output/output.vcf.gz
+## Final SNV output VCF file: output/snv.vcf.gz
+## Final Indel output VCF file: output/indel.vcf.gz
 ```
 
 Check [Usage](#Usage) for more options.
@@ -229,7 +230,8 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --platform ${PLATFORM} \                   ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}
   --output_dir ${OUTPUT_DIR}                 ## output path prefix
  
-## Final output file: ${OUTPUT_DIR}/output.vcf.gz
+## Final SNV output VCF file: output/snv.vcf.gz
+## Final Indel output VCF file: output/indel.vcf.gz
 ```
 
 ### Options
