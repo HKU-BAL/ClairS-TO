@@ -13,8 +13,8 @@ from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
 HIGH_QUAL_SNV = 12
-HIGH_QUAL_INDEL = 20
 LOW_AF_SNV = 0.1
+HIGH_QUAL_INDEL = 20
 LOW_AF_INDEL = 0.3
 min_hom_germline_af = 0.75
 eps = 0.5
@@ -164,7 +164,7 @@ def haplotype_filter_per_pos(args):
     flanking = args.flanking
 
     ctg_range = "{}:{}-{}".format(ctg_name, pos - flanking, pos + flanking + 1)
-    samtools_command = "{} mpileup  --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME --output-extra HP ".format(
+    samtools_command = "{} mpileup --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME --output-extra HP ".format(
         samtools, min_mq, min_bq, ctg_range)
 
     tumor_samtools_command = samtools_command + tumor_bam_fn
