@@ -1186,7 +1186,7 @@ def somatic_calling(args):
             ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
             ht_command += ' -j ' + str(args.threads)
             ht_command += ' ' + args.longphase + ' haplotag'
-            ht_command += ' -o ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
+            ht_command += ' -o ' + phasing_output_path + '/phased_bam_output/tumor_{1}'
             ht_command += ' --reference ' + args.ref_fn
             ht_command += ' --region {1} '
             ht_command += ' -s ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
