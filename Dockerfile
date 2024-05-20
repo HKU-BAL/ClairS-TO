@@ -62,7 +62,7 @@ RUN wget --quiet -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/a
     rm linux-64_micromamba-1.5.1-2.tar.bz2 && \
     rm -r info/ && \
     rm -r bin/ && \
-    micromamba create -n clairs-to -c pytorch -c conda-forge -c bioconda clair3 bcftools einops pytorch tqdm torchinfo -y && \
+    micromamba create -n clairs-to -c pytorch -c conda-forge -c bioconda clair3 bcftools einops tqdm pytorch torchinfo -y && \
     rm -rf /opt/micromamba/pkgs/* && \
     rm -rf /root/.cache/pip
 
