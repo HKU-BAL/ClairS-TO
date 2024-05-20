@@ -134,7 +134,6 @@ singularity pull docker://hkubal/clairs-to:latest
 singularity exec \
   -B ${INPUT_DIR},${OUTPUT_DIR} \
   clairs-to_latest.sif \
-  hkubal/clairs-to:latest \
   /opt/bin/run_clairs_to \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
@@ -177,11 +176,11 @@ chmod +x ./Miniconda3-latest-Linux-x86_64.sh
 # create and activate an environment named clairs-to
 # install pypy and packages in the environment
 # for micromamba
-micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina bcftools einops python=3.9.0 -y
+micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3 bcftools einops python=3.9.0 -y
 micromamba activate clairs-to
 
 ## for anaconda 
-#conda create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3-illumina bcftools einops python=3.9.0 -y
+#conda create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3 bcftools einops python=3.9.0 -y
 #source activate clairs-to
 
 git clone https://github.com/HKU-BAL/ClairS-TO.git
