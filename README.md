@@ -316,6 +316,8 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Use longphase for intermediate phasing.
   --use_whatshap_for_intermediate_phasing
                         Use whatshap for phasing.
+  --use_longphase_for_intermediate_haplotagging USE_LONGPHASE_FOR_INTERMEDIATE_HAPLOTAGGING
+                        Use longphase instead of whatshap for intermediate haplotagging.
   --disable_intermediate_phasing
                         Disable intermediate phasing, runs faster but reduces precision.
   --disable_nonsomatic_tagging
