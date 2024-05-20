@@ -738,6 +738,10 @@ def check_args(args):
         sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
     if args.use_whatshap_for_intermediate_phasing and not os.path.exists(args.whatshap):
         sys.exit(log_error("[ERROR] Cannot find whatshap at {}".format(args.whatshap)))
+    if args.use_longphase_for_intermediate_haplotagging is None:
+        args.use_longphase_for_intermediate_haplotagging = True
+    if args.use_longphase_for_intermediate_haplotagging and not os.path.exists(args.longphase):
+        sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
@@ -833,7 +837,7 @@ def print_args(args):
     logging("[INFO] INDEL PILEUP AFFIRMATIVE MODEL PATH: {}".format(args.indel_pileup_affirmative_model_path))
     logging("[INFO] INDEL PILEUP NEGATIONAL MODEL PATH: {}".format(args.indel_pileup_negational_model_path))
     logging("[INFO] BED FILE PATH: {}".format(args.bed_fn))
-    logging("[INFO] SPECIFIED REGION FOR CALLING: {}".format(args.region))
+    logging("[INFO] SPECIFIED REGIONS FOR CALLING: {}".format(args.region))
     logging("[INFO] REGIONS FOR INDEL CALLING:: {}".format(args.call_indels_only_in_these_regions))
     logging("[INFO] CONTIGS FOR CALLING: {}".format(args.ctg_name))
     logging("[INFO] ENABLE INCLUDING ALL CTGS FOR CALLING: {}".format(args.include_all_ctgs))
@@ -925,6 +929,8 @@ def print_command_line(args):
             args.use_longphase_for_intermediate_phasing) if args.use_longphase_for_intermediate_phasing is not None else ""
         cmdline += '--use_whatshap_for_intermediate_phasing {} '.format(
             args.use_whatshap_for_intermediate_phasing) if args.use_whatshap_for_intermediate_phasing is not None else ""
+        cmdline += '--use_longphase_for_intermediate_haplotagging {} '.format(
+            args.use_longphase_for_intermediate_haplotagging) if args.use_longphase_for_intermediate_haplotagging is not None else ""
         cmdline += '--use_gpu ' if args.use_gpu else ""
         cmdline += '--skip_steps {} '.format(args.skip_steps) if args.skip_steps is not None else ""
         cmdline += '--conda_prefix {} '.format(args.conda_prefix) if args.conda_prefix is not None else ""
@@ -1175,18 +1181,31 @@ def somatic_calling(args):
         commands_list.append(pt_command + ' && ' + tabix_command)
 
         echo_list.append("[INFO] Haplotag the Tumor BAM")
-        ht_command = '( ' + time + args.parallel
-        ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
-        ht_command += ' -j ' + str(args.threads)
-        ht_command += ' ' + args.whatshap + ' haplotag'
-        ht_command += ' --output ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
-        ht_command += ' --reference ' + args.ref_fn
-        ht_command += ' --regions {1} '
-        ht_command += ' --ignore-read-groups'
-        ht_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
-        ht_command += ' ' + args.tumor_bam_fn
-        ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-        ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
+        if args.use_longphase_for_intermediate_haplotagging is not None:
+            ht_command = '( ' + time + args.parallel
+            ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
+            ht_command += ' -j ' + str(args.threads)
+            ht_command += ' ' + args.longphase + ' haplotag'
+            ht_command += ' -o ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
+            ht_command += ' --reference ' + args.ref_fn
+            ht_command += ' --region {1} '
+            ht_command += ' -s ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
+            ht_command += ' -b ' + args.tumor_bam_fn
+            ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
+        else:
+            ht_command = '( ' + time + args.parallel
+            ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
+            ht_command += ' -j ' + str(args.threads)
+            ht_command += ' ' + args.whatshap + ' haplotag'
+            ht_command += ' --output ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
+            ht_command += ' --reference ' + args.ref_fn
+            ht_command += ' --regions {1} '
+            ht_command += ' --ignore-read-groups'
+            ht_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
+            ht_command += ' ' + args.tumor_bam_fn
+            ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
 
         index_command = args.parallel + ' -j ' + str(args.threads)
         index_command += ' ' + args.samtools + ' index '
@@ -1825,7 +1844,7 @@ def somatic_parser():
         "--longphase",
         type=str,
         default=None,
-        help="Absolute path of longphase, longphase >= 1.3 is required."
+        help="Absolute path of longphase, longphase >= 1.7 is required."
     )
 
     other_params.add_argument(
@@ -1853,6 +1872,13 @@ def somatic_parser():
         "--disable_intermediate_phasing",
         action='store_true',
         help="Disable intermediate phasing, runs faster but reduces precision."
+    )
+
+    other_params.add_argument(
+        "--use_longphase_for_intermediate_haplotagging",
+        type=str2bool,
+        default=None,
+        help="Use longphase instead of whatshap for intermediate haplotagging."
     )
 
     other_params.add_argument(
