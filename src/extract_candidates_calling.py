@@ -276,7 +276,7 @@ def extract_pair_candidates(args):
     is_ctg_name_given = ctg_name is not None
     is_ctg_range_given = is_ctg_name_given and ctg_start is not None and ctg_end is not None
     if is_ctg_range_given:
-        extend_start = max(ctg_start - ( no_of_positions), 1)
+        extend_start = max(ctg_start - (no_of_positions), 1)
         extend_end = ctg_end + no_of_positions
         reads_regions.append(region_from(ctg_name=ctg_name, ctg_start=extend_start, ctg_end=extend_end))
         reference_start, reference_end = ctg_start - param.expandReferenceRegion, ctg_end + param.expandReferenceRegion
