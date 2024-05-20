@@ -74,8 +74,8 @@ COPY . .
 RUN cd /opt/bin/src/realign && \
     g++ -std=c++14 -O1 -shared -fPIC -o realigner ssw_cpp.cpp ssw.c realigner.cpp && \
     g++ -std=c++11 -shared -fPIC -o debruijn_graph -O3 debruijn_graph.cpp && \
-    wget http://www.bio8.cs.hku.hk/clairs-to/models/clairs-to_models.tar.gz	-P /opt/models  && \
-    wget http://www.bio8.cs.hku.hk/clairs-to/databases/clairs-to_databases.tar.gz -P /opt/databases  && \
+    wget http://www.bio8.cs.hku.hk/clairs-to/models/clairs-to_models.tar.gz	-P /opt/models && \
+    wget http://www.bio8.cs.hku.hk/clairs-to/databases/clairs-to_databases.tar.gz -P /opt/databases && \
     mkdir -p /opt/micromamba/envs/clairs-to/bin/clairs-to_models && \
     mkdir -p /opt/micromamba/envs/clairs-to/bin/clairs-to_databases && \
     tar -zxvf /opt/models/clairs-to_models.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_models && \
