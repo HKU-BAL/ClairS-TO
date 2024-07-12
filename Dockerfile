@@ -87,7 +87,7 @@ RUN cd /opt/bin/src/realign && \
     mkdir -p /opt/micromamba/envs/clairs-to/bin/clairs-to_cna_data && \
     tar -zxvf /opt/models/clairs-to_models.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_models && \
     tar -zxvf /opt/databases/clairs-to_databases.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_databases && \
-    tar -zxvf /opt/cna_data/reference_files.tar.gz -C /opt/conda/envs/clairs-to/bin/clairs-to_cna_data && \
+    tar -zxvf /opt/cna_data/reference_files.tar.gz -C /opt/micromamba/envs/clairs-to/bin/clairs-to_cna_data && \
     rm /opt/models/clairs-to_models.tar.gz && \
     rm /opt/databases/clairs-to_databases.tar.gz && \
     rm -rf /opt/cna_data/reference_files.tar.gz && \
