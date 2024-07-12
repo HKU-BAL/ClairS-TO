@@ -70,7 +70,7 @@ ENV PATH /opt/micromamba/envs/clairs-to/bin:$PATH
 ENV CONDA_DEFAULT_ENV clairs-to
 
 RUN apt install curl zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev -y && \
-    /opt/conda/envs/clairs-to/bin/python3 -m pip install scipy scikit-learn && \
+    /opt/micromamba/envs/clairs-to/bin/python3 -m pip install scipy scikit-learn && \
     rm -rf /var/lib/apt/lists/*
 
 COPY . .
