@@ -27,6 +27,9 @@ vcf_header = dedent("""\
             ##FILTER=<ID=StrandBias,Description="Strand bias p-value <0.001">
             ##FILTER=<ID=Realignment,Description="For short-read, both the count of supporting alt alleles and AF decreased after realignment">
             ##FILTER=<ID=RefCall,Description="Reference call">
+            ##INFO=<ID=Verdict_Germline,Number=0,Type=Flag,Description="Variant tagged by verdict as Germline">
+            ##INFO=<ID=Verdict_Somatic,Number=0,Type=Flag,Description="Variant tagged by verdict as Somatic">
+            ##INFO=<ID=Verdict_SubclonalSomatic,Number=0,Type=Flag,Description="Variant tagged by verdict as Subclonal Somatic">
             ##INFO=<ID=H,Number=0,Type=Flag,Description="Variant found only in one haplotype in the phased reads">
             ##INFO=<ID=FAU,Number=1,Type=Integer,Description="Count of A in forward strand in the tumor BAM">
             ##INFO=<ID=FCU,Number=1,Type=Integer,Description="Count of C in forward strand in the tumor BAM">
