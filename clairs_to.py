@@ -54,7 +54,8 @@ data_preprocess_folder = [
     "haplotype_filtering",
     'cal_af_distribution',
     "compare_vcf",
-    "select_hetero_snp_for_phasing"
+    "select_hetero_snp_for_phasing",
+    'cna_germline_tagging',
 ]
 
 
