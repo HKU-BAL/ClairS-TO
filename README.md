@@ -45,7 +45,9 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Latest Updates
 
-*v0.1.0 (Apr. 25, 2024)*: 1. Added support for somatic Indel calling. To disable, use `--disable_indel_calling`. Indels are called only in the BED regions specified by the `--calling_indels_only_in_these_regions` option. The default regions are (whole genome - GIAB stratification v3.3 all difficult regions + CMRG v1.0 regions). 2. Added `--panel_of_normals_require_allele_matching` option that takes comma separated booleans to indicate whether to require allele matching for each of the PoNs given in `--panel_of_normals`. By default, allele matching is enabled when using germline variants sources (e.g., gnomAD, dbSNP) for non-somatic tagging, and is disabled when using panels (e.g., 1000G PoN). 3. Added multiple filters to remove as many spurious calls as possible. Including the use of i. phasing information: how good the alternative alleles are from a single haplotype after phasing ([Simpson, 2024](https://www.biorxiv.org/content/10.1101/2024.02.26.582089v1)); ii. ancestral haplotype support: can an ancestral haplotype be found for reads that contain the alternative allele ([Zheng et al., 2023](https://www.biorxiv.org/content/10.1101/2023.08.17.553778v1)); iii. BQ, MQ of the alternative allele reads; iv. variant position in read: whether the supporting alleles are gathered at the start or end of reads; v. strand bias; vi. realignment effect: for short read, whether both the count of supporting alt alleles and AF decreased after realignment. 4. Added `--qual_cutoff_phaseable_region` and `--qual_cutoff_unphaseable_region` to allow different qual cutoffs for tagging (as LowQual) the variants in the phaseable and unphaseable regions. Variants in unphaseable regions are suitable for a higher quality cutoff than those in the phaseable regions. 5. Added tags: i. `H` to indicate a variant is found in phaseable region; ii. `SB` showing the p-value of Fisher’s exact test on strand bias.
+*v0.2.0 (Jul. 12, 2024)*: 1. Added a module called `verdict` to statistically classify a called variant into either a germline, somatic, or subclonal somatic variant based on the copy number alterations (CNA) profile and tumor purity estimation. To disable, use `--disable_verdict` option. Verdict module is based on [ASCAT](https://www.pnas.org/doi/full/10.1073/pnas.1009843107) algorithms and appropriate to use with tumor purity estimation lower than 0.8.
+
+*v0.1.0 (Apr. 25, 2024)*: 1. Added support for somatic Indel calling. To disable, use `--disable_indel_calling` option. Indels are called only in the BED regions specified by the `--calling_indels_only_in_these_regions` option. The default regions are (whole genome - GIAB stratification v3.3 all difficult regions + CMRG v1.0 regions). 2. Added `--panel_of_normals_require_allele_matching` option that takes comma separated booleans to indicate whether to require allele matching for each of the PoNs given in `--panel_of_normals`. By default, allele matching is enabled when using germline variants sources (e.g., gnomAD, dbSNP) for non-somatic tagging, and is disabled when using panels (e.g., 1000G PoN). 3. Added multiple filters to remove as many spurious calls as possible. Including the use of i. phasing information: how good the alternative alleles are from a single haplotype after phasing ([Simpson, 2024](https://www.biorxiv.org/content/10.1101/2024.02.26.582089v1)); ii. ancestral haplotype support: can an ancestral haplotype be found for reads that contain the alternative allele ([Zheng et al., 2023](https://www.biorxiv.org/content/10.1101/2023.08.17.553778v1)); iii. BQ, MQ of the alternative allele reads; iv. variant position in read: whether the supporting alleles are gathered at the start or end of reads; v. strand bias; vi. realignment effect: for short read, whether both the count of supporting alt alleles and AF decreased after realignment. 4. Added `--qual_cutoff_phaseable_region` and `--qual_cutoff_unphaseable_region` to allow different qual cutoffs for tagging (as LowQual) the variants in the phaseable and unphaseable regions. Variants in unphaseable regions are suitable for a higher quality cutoff than those in the phaseable regions. 5. Added tags: i. `H` to indicate a variant is found in phaseable region; ii. `SB` showing the p-value of Fisher’s exact test on strand bias.
 
 *v0.0.2 (Jan. 26, 2024)*: 1. Added ONT Guppy 5kHz HAC (`-p ont_r10_guppy_hac_5khz`) and Dorado 4kHz HAC (`-p ont_r10_dorado_hac_4khz`) models, check [here](#pre-trained-models) for more details. 2. Added `FAU`, `FCU`, `FGU`, `FTU`, `RAU`, `RCU`, `RGU`, and `RTU` tags for the count of forward/reverse strand reads supporting A/C/G/T. 3. Revamped the way how panel of normals (PoNs) are inputted. Population databases are also considered as PoNs, and users can disable default population databases and add multiple other PoNs. 4. Added `file` and `md5` information of the PoNs to the VCF output header. 5. Enabled somatic variant calling in sex chromosomes. 6. Fixed an issue that misses PoNs tagging for low-quality variants.
 
@@ -176,7 +178,7 @@ chmod +x ./Miniconda3-latest-Linux-x86_64.sh
 # create and activate an environment named clairs-to
 # install pypy and packages in the environment
 # for micromamba
-micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3 bcftools einops python=3.9.0 -y
+micromamba create -n clairs-to -c bioconda -c pytorch -c conda-forge pytorch tqdm clair3 bcftools einops scipy scikit-learn python=3.9.0 -y
 micromamba activate clairs-to
 
 ## for anaconda 
@@ -187,14 +189,29 @@ git clone https://github.com/HKU-BAL/ClairS-TO.git
 cd ClairS-TO
 
 # make sure in clairs-to environment
-# download pre-trained models
+# download pre-trained models and other resources
 echo ${CONDA_PREFIX}
 mkdir -p ${CONDA_PREFIX}/bin/clairs-to_models
 mkdir -p ${CONDA_PREFIX}/bin/clairs-to_databases
+mkdir -p ${CONDA_PREFIX}/bin/clairs-to_cna_data
 wget http://www.bio8.cs.hku.hk/clairs-to/models/clairs-to_models.tar.gz
 wget http://www.bio8.cs.hku.hk/clairs-to/databases/clairs-to_databases.tar.gz
+wget http://www.bio8.cs.hku.hk/clairs-to/cna_data/reference_files.tar.gz
 tar -zxvf clairs-to_models.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_models/
 tar -zxvf clairs-to_databases.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_databases/
+tar -zxvf reference_files.tar.gz -C ${CONDA_PREFIX}/bin/clairs-to_cna_data/
+
+#CLAIRSTO_PATH=`pwd`
+
+## to enable realignment module
+#sudo apt install g++ libboost-all-dev -y
+#cd ${CLAIRSTO_PATH}/src/realign && g++ -std=c++14 -O1 -shared -fPIC -o realigner ssw_cpp.cpp ssw.c realigner.cpp && g++ -std=c++11 -shared -fPIC -o debruijn_graph -O3 debruijn_graph.cpp
+
+## to install allele counter for verdict module
+#sudo apt install curl zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev gcc -y
+#cd ${CLAIRSTO_PATH}/src/verdict/allele_counter && chmod +x ./setup.sh && /bin/bash ./setup.sh ${CLAIRSTO_PATH}/src/verdict/allele_counter
+
+#cd ${CLAIRSTO_PATH}
 
 ./run_clairs_to --help
 ```
@@ -321,7 +338,9 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --disable_intermediate_phasing
                         Disable intermediate phasing, runs faster but reduces precision.
   --disable_nonsomatic_tagging
-                        Disable non-somatic variants tagging and ignore `--panel_of_normals`.                                            
+                        Disable non-somatic variants tagging and ignore `--panel_of_normals`.
+  --disable_verdict
+                        Disable using verdict to tag the variants in CNA regions. We suggest using the parameter only for sample with tumor purity estimation lower than 0.8. Default: Enabled.                                    
 ```
 
 #### Call Variants in one or multiple chromosomes using the `-C/--ctg_name` parameter
