@@ -111,4 +111,4 @@ chmod +x ilmn_quick_demo.sh
 ./ilmn_quick_demo.sh
 ```
 
-Check the results using `less ${HOME}/illumina_quick_demo/output/output.vcf.gz`.
+Check the results using `less ${HOME}/illumina_quick_demo/output/snv.vcf.gz`.

@@ -111,4 +111,4 @@ chmod +x ont_quick_demo.sh
 ./ont_quick_demo.sh
 ```
 
-Check the results using `less ${HOME}/ont_quick_demo/output/output.vcf.gz`.
+Check the results using `less ${HOME}/ont_quick_demo/output/snv.vcf.gz`.
