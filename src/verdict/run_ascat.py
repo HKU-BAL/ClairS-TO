@@ -74,8 +74,6 @@ def run_ascat(tumor_logr_file, tumor_baf_file, germline_genotypes_file, tumor_lo
     tumor_logr = open(tumor_logr_file, 'r')
     tumor_baf = open(tumor_baf_file, 'r')
     germline_genotypes = open(germline_genotypes_file, 'r')
-    tumor_logr_segmented = open(tumor_logr_segmented_file, 'r')
-    tumor_baf_segmented = open(tumor_baf_segmented_file, 'r')
     tumor_logr_dict = dict()
     tumor_baf_dict = dict()
     germline_genotypes_dict = dict()
@@ -115,6 +113,8 @@ def run_ascat(tumor_logr_file, tumor_baf_file, germline_genotypes_file, tumor_lo
     if len(het_indices) == 0:
         return
 
+    tumor_logr_segmented = open(tumor_logr_segmented_file, 'r')
+    tumor_baf_segmented = open(tumor_baf_segmented_file, 'r')
     for idx, tumor_logr_segmented_line in enumerate(tumor_logr_segmented.readlines()):
         if idx == 0:
             continue
