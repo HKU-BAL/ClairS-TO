@@ -974,6 +974,7 @@ def print_command_line(args):
         cmdline += '--indel_min_af {} '.format(args.indel_min_af) if args.indel_min_af is not None else ""
         cmdline += '--min_coverage {} '.format(args.min_coverage) if args.min_coverage is not None else ""
         cmdline += '--min_bq {} '.format(args.min_bq) if args.min_bq is not None else ""
+        cmdline += ' --max_depth {} '.format(args.bam_mplp_set_maxcnt) if args.bam_mplp_set_maxcnt is not None else ""
         cmdline += '--chunk_size {} '.format(args.chunk_size) if args.chunk_size is not None else ""
         cmdline += '--dry_run ' if args.dry_run else ""
         cmdline += '--remove_intermediate_dir ' if args.remove_intermediate_dir else ""
@@ -1082,6 +1083,7 @@ def somatic_calling(args):
     cpt_aff_command += ' --ref_fn ' + args.ref_fn
     cpt_aff_command += ' --ctg_name {1/.}'
     cpt_aff_command += ' --min_bq ' + str(args.min_bq)
+    cpt_aff_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
     cpt_aff_command += ' --samtools ' + args.samtools
     cpt_aff_command += ' --candidates_bed_regions {1}'
     cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
@@ -1107,6 +1109,7 @@ def somatic_calling(args):
         cpt_neg_command += ' --samtools ' + args.samtools
         cpt_neg_command += ' --candidates_bed_regions {1}'
         cpt_neg_command += ' --min_bq 0'
+        cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
         cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
         cpt_neg_command += ' --platform ' + args.platform
         cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
@@ -1399,6 +1402,7 @@ def somatic_calling(args):
         indel_cpt_aff_command += ' --ref_fn ' + args.ref_fn
         indel_cpt_aff_command += ' --ctg_name {1/.}'
         indel_cpt_aff_command += ' --min_bq ' + str(args.min_bq)
+        indel_cpt_aff_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
         indel_cpt_aff_command += ' --samtools ' + args.samtools
         indel_cpt_aff_command += ' --candidates_bed_regions {1}'
         indel_cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
@@ -1425,6 +1429,7 @@ def somatic_calling(args):
             indel_cpt_neg_command += ' --samtools ' + args.samtools
             indel_cpt_neg_command += ' --candidates_bed_regions {1}'
             indel_cpt_neg_command += ' --min_bq 0'
+            indel_cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
             indel_cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
             indel_cpt_neg_command += ' --platform ' + args.platform
             indel_cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
@@ -1784,6 +1789,13 @@ def somatic_parser():
     ## Minimum base quality
     optional_params.add_argument(
         "--min_bq",
+        type=int,
+        default=None,
+        help=SUPPRESS
+    )
+
+    optional_params.add_argument(
+        "--bam_mplp_set_maxcnt",
         type=int,
         default=None,
         help=SUPPRESS
