@@ -470,7 +470,7 @@ def check_contigs_intersection(args, fai_fn):
 
     if default_chunk_num == 0 and max(contig_length_list) < DEFAULT_CHUNK_SIZE / 5:
         logging(log_warning(
-            '[WARNING] The length of the longest contig {} is more than five times smaller smaller than the default chunk size {}, consider setting a smaller --chunk_size= instead for better parallelism.'.format(
+            '[WARNING] The length of the longest contig {} is more than five times smaller than the default chunk size {}, consider setting a smaller --chunk_size= instead for better parallelism.'.format(
                 max(contig_length_list), DEFAULT_CHUNK_SIZE)))
 
     if is_bed_file_provided:
@@ -483,6 +483,14 @@ def check_contigs_intersection(args, fai_fn):
     contig_path = os.path.join(args.output_dir, 'tmp', 'CONTIGS')
     with open(contig_path, 'w') as output_file:
         output_file.write('\n'.join(sorted_contig_list))
+
+    if not args.disable_verdict:
+        contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
+        verdict_flag = set(contigs_order).intersection(set(sorted_contig_list)) is not None
+        if not verdict_flag:
+            args.disable_verdict = True
+            logging(log_warning(
+                "[WARNING] Verdict currently only works for GRCh38 reference genome, apply the --disable_verdict option!"))
 
     chunk_list = []
     chunk_list_path = os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
