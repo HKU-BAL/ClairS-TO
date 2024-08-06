@@ -486,7 +486,7 @@ def check_contigs_intersection(args, fai_fn):
 
     if not args.disable_verdict:
         contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
-        verdict_flag = set(contigs_order).intersection(set(sorted_contig_list)) is not None
+        verdict_flag = len(set(contigs_order).intersection(set(sorted_contig_list))) > 0
         if not verdict_flag:
             args.disable_verdict = True
             logging(log_warning(
@@ -843,7 +843,7 @@ def check_args(args):
                 contig_name = columns[0]
                 ref_contigs_set.add(contig_name)
         contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
-        verdict_flag = set(contigs_order).intersection(ref_contigs_set) is not None
+        verdict_flag = len(set(contigs_order).intersection(ref_contigs_set)) > 0
         if not verdict_flag:
             args.disable_verdict = True
             logging(log_warning(
