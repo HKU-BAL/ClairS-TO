@@ -163,7 +163,7 @@ def haplotype_filter_per_pos(args):
 
     flanking = args.flanking
 
-    ctg_range = "{}:{}-{}".format(ctg_name, pos - flanking, pos + flanking + 1)
+    ctg_range = "{}:{}-{}".format(ctg_name, max(pos - flanking, 1), pos + flanking + 1)
     samtools_command = "{} mpileup --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME --output-extra HP ".format(
         samtools, min_mq, min_bq, ctg_range)
 
@@ -220,7 +220,7 @@ def haplotype_filter_per_pos(args):
                 set([read_name_list[r_idx] for r_idx in read_start_end_set]))
 
         pos_dict[p] = dict(zip(read_name_list, base_list))
-        center_ref_base = reference_sequence[p - pos + flanking]
+        center_ref_base = reference_sequence[p - max(pos - flanking, 1)]
 
         # discard low BQ & MQ variants
         average_min_bq = param.ont_min_bq
@@ -309,7 +309,7 @@ def haplotype_filter_per_pos(args):
     alt_base_dict = defaultdict(int)
 
     for p, rb_dict in pos_dict.items():
-        rb = reference_sequence[p - pos + flanking]
+        rb = reference_sequence[p - max(pos - flanking, 1)]
         read_alt_dict = pos_dict[p]
         if p == pos:
             continue
