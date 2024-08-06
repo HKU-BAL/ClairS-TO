@@ -357,7 +357,10 @@ def create_tensor(args):
             end = int(row[2]) + 1
             ctg_start = min(position, ctg_start)
             ctg_end = max(end, ctg_end)
-            center = position + (end - position) // 2 - 1
+            if position < 1:
+                center = end - param.flankingBaseNum - 2
+            else:
+                center = position + (end - position) // 2 - 1
             candidates_pos_set.add(center)
             variant_type = 'unknown'
             if len(row) == 4:
@@ -401,6 +404,7 @@ def create_tensor(args):
     extend_start, extend_end = None, None
     if is_ctg_range_given:
         extend_start = ctg_start - no_of_positions
+        extend_start = 1 if extend_start < 1 else extend_start
         extend_end = ctg_end + no_of_positions
         reads_regions.append(region_from(ctg_name=ctg_name, ctg_start=extend_start, ctg_end=extend_end))
         reference_start, reference_end = ctg_start - param.expandReferenceRegion, ctg_end + param.expandReferenceRegion
@@ -440,7 +444,6 @@ def create_tensor(args):
 
     samtools_mpileup_tumor_process = subprocess_popen(
         shlex.split(samtools_command + tumor_phasing_option + ' ' + tumor_bam_file_path), stderr=PIPE)
-
 
     if tensor_can_output_path != "PIPE":
         tensor_can_fpo = open(tensor_can_output_path, "wb")
