@@ -41,8 +41,6 @@ from threading import Thread
 from sys import stderr
 from subprocess import PIPE, run, Popen
 
-sys.path.insert(0, '/autofs/bal13/lchen/ClairS-TO/ClairS-TO')
-
 from clairs.call_variants import output_vcf_from_probability, OutputConfig
 from clairs.model import CvT, BiGRU_NACGT, CvT_Indel, BiGRU_NACGT_Indel
 from shared.utils import IUPAC_base_to_ACGT_base_dict as BASE2ACGT, BASIC_BASES, str2bool, file_path_from, log_error, \
@@ -414,7 +412,7 @@ def output_with(
         tumor_alt_info = tumor_alt_info.decode()
 
     chromosome, position, reference_sequence = chr_pos_seq.rstrip().split(':')[:3]
-    reference_base = reference_sequence[param.flankingBaseNum].upper()
+    reference_base = BASE2ACGT[reference_sequence[param.flankingBaseNum].upper()]
     print_output_message(
         output_file,
         chromosome,
