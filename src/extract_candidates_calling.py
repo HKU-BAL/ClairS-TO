@@ -459,7 +459,7 @@ def extract_pair_candidates(args):
             all_candidates_regions.append(output_path)
             with open(output_path, 'w') as output_file:
                 output_file.write('\n'.join(
-                    ['\t'.join([ctg_name, str(x - flankingBaseNum - 1), str(x + flankingBaseNum + 1)]) for x in
+                    ['\t'.join([ctg_name, str(max(x - flankingBaseNum - 1, 1)), str(x + flankingBaseNum + 1)]) for x in
                      split_output]) + '\n')  # bed format
 
         all_candidates_regions_path = os.path.join(candidates_folder,
@@ -479,7 +479,7 @@ def extract_pair_candidates(args):
             all_candidates_regions.append(output_path)
             with open(output_path, 'w') as output_file:
                 output_file.write('\n'.join(
-                    ['\t'.join([ctg_name, str(x - flankingBaseNum - 1), str(x + flankingBaseNum + 1)]) for x in
+                    ['\t'.join([ctg_name, str(max(x - flankingBaseNum - 1, 1)), str(x + flankingBaseNum + 1)]) for x in
                      split_output]) + '\n')  # bed format
 
         all_candidates_regions_path = os.path.join(candidates_folder,
