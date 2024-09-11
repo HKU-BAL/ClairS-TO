@@ -612,6 +612,7 @@ def haplotype_filter(args):
     parallel_command += " --samtools " + str(args.samtools)
     parallel_command += " --tumor_bam_fn " + str(args.tumor_bam_fn)
     parallel_command += " --ref_fn " + str(args.ref_fn)
+    parallel_command += " --disable_read_start_end_filtering " + str(args.disable_read_start_end_filtering)
     parallel_command += " :::: " + str(hap_info_output_path)
 
     haplotype_filter_process = subprocess_popen(shlex.split(parallel_command))
