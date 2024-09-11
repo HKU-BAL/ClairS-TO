@@ -130,7 +130,6 @@ def postfilter_per_pos(args):
     samtools = args.samtools
     min_bq = args.min_bq
     min_mq = args.min_mq
-    debug = args.debug
     max_co_exist_read_num = args.min_alt_coverage
     is_snp = len(ref_base) == 1 and len(alt_base) == 1
     is_ins = len(ref_base) == 1 and len(alt_base) > 1
@@ -403,6 +402,7 @@ def postfilter(args):
     parallel_command += " --samtools " + str(args.samtools)
     parallel_command += " --tumor_bam_fn " + str(args.tumor_bam_fn)
     parallel_command += " --ref_fn " + str(args.ref_fn)
+    parallel_command += " --disable_read_start_end_filtering " + str(args.disable_read_start_end_filtering)
     parallel_command += " :::: " + str(pf_info_output_path)
 
     postfilter_process = subprocess_popen(shlex.split(parallel_command))
