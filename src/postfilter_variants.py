@@ -142,6 +142,8 @@ def postfilter_per_pos(args):
     args.qual = args.qual if args.qual is not None else 102
     args.af = args.af if args.af is not None else 1.0
 
+    disable_read_start_end_filtering = args.disable_read_start_end_filtering
+
     if not os.path.exists(tumor_bam_fn):
         tumor_bam_fn += ctg_name + '.bam'
 
@@ -231,8 +233,9 @@ def postfilter_per_pos(args):
         pos_counter_dict[p] = base_counter
 
     # near to read start end and have high overlap
-    if len(all_read_start_end_set.intersection(alt_base_read_name_set)) >= 0.3 * len(alt_base_read_name_set):
-        pass_read_start_end = False
+    if not disable_read_start_end_filtering:
+        if len(all_read_start_end_set.intersection(alt_base_read_name_set)) >= 0.3 * len(alt_base_read_name_set):
+            pass_read_start_end = False
 
     match_count = 0
     ins_length = 0
@@ -534,6 +537,9 @@ def main():
                         help=SUPPRESS)
 
     parser.add_argument('--qual', type=float, default=None,
+                        help=SUPPRESS)
+
+    parser.add_argument('--disable_read_start_end_filtering', type=str2bool, default=False,
                         help=SUPPRESS)
 
     global args
