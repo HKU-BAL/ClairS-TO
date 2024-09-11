@@ -983,6 +983,7 @@ def print_command_line(args):
         cmdline += '--min_coverage {} '.format(args.min_coverage) if args.min_coverage is not None else ""
         cmdline += '--min_bq {} '.format(args.min_bq) if args.min_bq is not None else ""
         cmdline += ' --max_depth {} '.format(args.bam_mplp_set_maxcnt) if args.bam_mplp_set_maxcnt is not None else ""
+        cmdline += ' --max_indel_depth {} '.format(args.max_indel_length) if args.max_indel_length is not None else ""
         cmdline += '--chunk_size {} '.format(args.chunk_size) if args.chunk_size is not None else ""
         cmdline += '--dry_run ' if args.dry_run else ""
         cmdline += '--remove_intermediate_dir ' if args.remove_intermediate_dir else ""
@@ -1092,6 +1093,7 @@ def somatic_calling(args):
     cpt_aff_command += ' --ctg_name {1/.}'
     cpt_aff_command += ' --min_bq ' + str(args.min_bq)
     cpt_aff_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
+    cpt_aff_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
     cpt_aff_command += ' --samtools ' + args.samtools
     cpt_aff_command += ' --candidates_bed_regions {1}'
     cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
@@ -1118,6 +1120,7 @@ def somatic_calling(args):
         cpt_neg_command += ' --candidates_bed_regions {1}'
         cpt_neg_command += ' --min_bq 0'
         cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
+        cpt_neg_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
         cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
         cpt_neg_command += ' --platform ' + args.platform
         cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
@@ -1324,6 +1327,7 @@ def somatic_calling(args):
         postfilter_command += ' --debug ' if args.debug else ''
         postfilter_command += ' --show_ref ' if args.print_ref_calls else ''
         postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
+        postfilter_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
         postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4-2_POSTFILTER_SNV.log'
 
         commands_list += [realign_command + ' && ' + postfilter_command]
@@ -1344,6 +1348,7 @@ def somatic_calling(args):
         hap_g_command += ' --debug ' if args.debug else ''
         hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
         hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
+        hap_g_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
         hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER_SNV.log'
         commands_list += [hap_g_command]
 
@@ -1411,6 +1416,7 @@ def somatic_calling(args):
         indel_cpt_aff_command += ' --ctg_name {1/.}'
         indel_cpt_aff_command += ' --min_bq ' + str(args.min_bq)
         indel_cpt_aff_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
+        indel_cpt_aff_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
         indel_cpt_aff_command += ' --samtools ' + args.samtools
         indel_cpt_aff_command += ' --candidates_bed_regions {1}'
         indel_cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
@@ -1438,6 +1444,7 @@ def somatic_calling(args):
             indel_cpt_neg_command += ' --candidates_bed_regions {1}'
             indel_cpt_neg_command += ' --min_bq 0'
             indel_cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
+            indel_cpt_neg_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
             indel_cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
             indel_cpt_neg_command += ' --platform ' + args.platform
             indel_cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
@@ -1560,6 +1567,7 @@ def somatic_calling(args):
             indel_postfilter_command += ' --show_ref ' if args.print_ref_calls else ''
             indel_postfilter_command += ' --is_indel '
             indel_postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
+            indel_postfilter_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
             indel_postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8-2_POSTFILTER_INDEL.log'
 
             commands_list += [indel_realign_command + ' && ' + indel_postfilter_command]
@@ -1581,6 +1589,7 @@ def somatic_calling(args):
             indel_hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
             indel_hap_g_command += ' --is_indel '
             indel_hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
+            indel_hap_g_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
             indel_hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8_HAP_FILTER_INDEL.log'
             commands_list += [indel_hap_g_command]
 
@@ -1804,6 +1813,13 @@ def somatic_parser():
 
     optional_params.add_argument(
         "--bam_mplp_set_maxcnt",
+        type=int,
+        default=None,
+        help=SUPPRESS
+    )
+
+    optional_params.add_argument(
+        "--max_indel_length",
         type=int,
         default=None,
         help=SUPPRESS
@@ -2039,6 +2055,13 @@ def somatic_parser():
         "--apply_haplotype_filtering",
         type=str2bool,
         default=True,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        "--disable_read_start_end_filtering",
+        type=str2bool,
+        default=False,
         help=SUPPRESS
     )
 
