@@ -89,6 +89,7 @@ def update_GQ(columns):
     columns[9] = ':'.join(FORMAT)
     return columns
 
+
 def merge_vcf(args):
     compress_vcf = args.compress_vcf
     platform = args.platform
