@@ -28,6 +28,11 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ------
 
+## Performance figures
+
+### ONT Q20+ chemistry performance
+The latest performance figures as of Oct. 10th, 2024 (ClairS-TO v0.3.0) is available in this [technical note]().
+
 ## Contents
 - [Latest Updates](#latest-updates)
 - [Installation](#installation)
@@ -44,6 +49,8 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 ------
 
 ## Latest Updates
+
+*v0.3.0 (Oct. 11, 2024)* : This version is a major update. The new features and benchmarks are explained in a technical note titled [“Improving the performance of ClairS and ClairS-TO with new real cancer cell-line datasets and PoN”](). A summary of changes: 1. Starting from this version, ClairS-TO will provide two model types. `ssrs` is a model trained initially with synthetic samples and then real samples augmented (e.g., `ont_r10_dorado_sup_5khz_ssrs`), `ss` is a model trained from synthetic samples (e.g., `ont_r10_dorado_sup_5khz_ss`). The `ssrs` model provides better performance and fits most usage scenarios. `ss` model can be used when missing a cancer-type in model training is a concern. In v0.3.0, four real cancer cell-line datasets (HCC1937, HCC1954, H1437, and H2009) covering two cancer types (breast cancer, lung cancer) published by [Park et al.](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1) were used for `ssrs` model training. 2. Added using [CoLoRSdb](https://zenodo.org/records/13145123) (Consortium of Long Read Sequencing Database) as a PoN for tagging non-somatic variant. The idea was inspired by [Park et al., 2024](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1). The F1-score improved by ~10-20% for both SNV and Indel by using CoLoRSdb. 3. Added tagging indels at sequence with low entropy as `LowSeqEntropy`. 4. Added the `--indel_min_af` option and adjusted the default minimum allelic fraction requirement to 0.1 for Indels in ONT platform. 5. Removed limiting Indel calling to only confident and necessary regions (whole genome - GIAB stratification v3.3 all difficult regions + CMRG v1.0 regions). The practice was started with in v0.1.0, and is deemed unnecessary and removed in v0.4.0. User can use `--calling_indels_only_in_these_regions` option to specify Indel calling regions.
 
 *v0.2.0 (Jul. 12, 2024)*: 1. Added a module called `verdict` to statistically classify a called variant into either a germline, somatic, or subclonal somatic variant based on the copy number alterations (CNA) profile and tumor purity estimation. To disable, use `--disable_verdict` option. Please check out more technical details about Verdict [here](docs/verdict.md).
 
@@ -80,15 +87,19 @@ Check [Usage](#Usage) for more options.
 
 ClairS-TO trained both Affirmative and Negational models using GIAB samples, and carry on benchmarking on HCC1395 tumor sample dataset. All models were trained with chr20 excluded (including only chr1-19, 21, 22). 
 
-|  Platform   |        Model name         |      Chemistry /Instruments      | Basecaller | Latest update | Option (`-p/--platform`)  |   Reference   |  Aligner   |
-|:-----------:|:-------------------------:|:--------------------------------:|:----------:|:-------------:|:-------------------------:|:-------------:|:----------:|
-|     ONT     | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 | `ont_r10_dorado_sup_5khz` | GRCh38_no_alt |  Minimap2  |
-|     ONT     | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           | Dorado SUP | Nov. 10, 2023 | `ont_r10_dorado_sup_4khz` | GRCh38_no_alt |  Minimap2  |
-|     ONT     | r1041_e82_400bps_hac_v410 |          R10.4.1, 4khz           | Dorado HAC | Jan. 19, 2024 | `ont_r10_dorado_hac_4khz` | GRCh38_no_alt |  Minimap2  |
-|     ONT     | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           | Guppy6 SUP | Nov. 10, 2023 | `ont_r10_guppy_sup_4khz`  | GRCh38_no_alt |  Minimap2  |
-|     ONT     | r1041_e82_400bps_hac_g657 |          R10.4.1, 5khz           | Guppy6 HAC | Jan. 21, 2024 | `ont_r10_guppy_hac_5khz`  | GRCh38_no_alt |  Minimap2  |
-|  Illumina   |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 10, 2023 |          `ilmn`           |    GRCh38     |  BWA-MEM   |
-| PacBio HiFi |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 10, 2023 |       `hifi_revio`        | GRCh38_no_alt |  Minimap2  |
+|     Platform      |        Model name         |      Chemistry /Instruments      | Basecaller | Latest update |    Option (`-p/--platform`)    |   Reference   |  Aligner   |
+|:-----------------:|:-------------------------:|:--------------------------------:|:----------:|:-------------:|:------------------------------:|:-------------:|:----------:|
+| ONT <sup>1</sup>  | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Sep. 30, 2024 | `ont_r10_dorado_sup_5khz_ssrs` | GRCh38_no_alt |  Minimap2  |
+| ONT <sup>1</sup>  | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 | `ont_r10_dorado_sup_5khz_ss`   | GRCh38_no_alt |  Minimap2  |
+|        ONT        | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 |   `ont_r10_dorado_sup_5khz`    | GRCh38_no_alt |  Minimap2  |
+|        ONT        | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           | Dorado SUP | Nov. 10, 2023 |   `ont_r10_dorado_sup_4khz`    | GRCh38_no_alt |  Minimap2  |
+|        ONT        | r1041_e82_400bps_hac_v410 |          R10.4.1, 4khz           | Dorado HAC | Jan. 19, 2024 |   `ont_r10_dorado_hac_4khz`    | GRCh38_no_alt |  Minimap2  |
+|        ONT        | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           | Guppy6 SUP | Nov. 10, 2023 |    `ont_r10_guppy_sup_4khz`    | GRCh38_no_alt |  Minimap2  |
+|        ONT        | r1041_e82_400bps_hac_g657 |          R10.4.1, 5khz           | Guppy6 HAC | Jan. 21, 2024 |    `ont_r10_guppy_hac_5khz`    | GRCh38_no_alt |  Minimap2  |
+|     Illumina      |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 10, 2023 |             `ilmn`             |    GRCh38     |  BWA-MEM   |
+|    PacBio HiFi    |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 10, 2023 |          `hifi_revio`          | GRCh38_no_alt |  Minimap2  |
+
+**Caveats <sup>1</sup>**: Starting from v0.3.0 version, ClairS-TO will provide two model types. `ssrs` is a model trained initially with synthetic samples and then real samples augmented (e.g., `ont_r10_dorado_sup_5khz_ssrs`), `ss` is a model trained from synthetic samples (e.g., `ont_r10_dorado_sup_5khz_ss`). The `ssrs` model provides better performance and fits most usage scenarios. `ss` model can be used when missing a cancer-type in model training is a concern. In v0.3.0, four real cancer cell-line datasets (HCC1937, HCC1954, H1437, and H2009) covering two cancer types (breast cancer, lung cancer) published by [Park et al.](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1) were used for `ssrs` model training.
 
 ------
 
@@ -259,7 +270,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   -R, --ref_fn FASTA                Reference file input. The input file must be samtools indexed.
   -o, --output_dir OUTPUT_DIR       VCF output directory.
   -t, --threads THREADS             Max threads to be used.
-  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}.
+  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}.
 ```
 
 **Commonly used parameters:**
@@ -284,7 +295,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --snv_min_af FLOAT
                         Minimal SNV AF required for a variant to be called. Decrease SNV_MIN_AF might increase a bit of sensitivity, but in trade of precision, speed and accuracy. Default: 0.05.
   --indel_min_af FLOAT
-                        Minimal Indel AF required for a variant to be called. Default: 0.05.
+                        Minimal Indel AF required for a variant to be called. Default: 0.1.
   --min_coverage INT
                         Minimal coverage required for a variant to be called. Default: 4.
   -q INT, --qual INT    If set, variants with >INT will be tagged as PASS, or LowQual otherwise. Default: ONT - 12 , PacBio HiFi - 8, Illumina - 4.
@@ -293,15 +304,15 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --qual_cutoff_unphaseable_region INT
                         If set, variants called in unphaseable regions with >INT will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`.
   --panel_of_normals FILENAMES
-                        The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' if using multiple PoNs. Default: 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz,dbsnp.b138.non-somatic.sites.vcf.gz,1000g-pon.sites.vcf.gz'.
+                        The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' if using multiple PoNs. Default: 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz,dbsnp.b138.non-somatic.sites.vcf.gz,1000g-pon.sites.vcf.gz,CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz'.
   --panel_of_normals_require_allele_matching BOOLEANS
-                        Use together with `--panel_of_normals`. Whether to require allele matching for each PoN. Split by ',' if using multiple PoNs. Default: 'True,True,False'.
+                        Use together with `--panel_of_normals`. Whether to require allele matching for each PoN. Split by ',' if using multiple PoNs. Default: 'True,True,False,False'.
   --snv_output_prefix PATH_PREFIX
                         Prefix for SNV output VCF filename. Default: snv.
   --indel_output_prefix PATH_PREFIX
                         Prefix for Indel output VCF filename. Default: indel.
   --call_indels_only_in_these_regions BED_FN
-                        Call Indel only in the provided regions. Supersede by `--bed_fn`. To call Indel in the whole genome, input a BED covering the whole genome. Default: 'GRCh38Chr1-22XY_excludedGIABStratifV3.3AllDifficultRegions_includedCMRGv1.0.bed'                     
+                        Call Indel only in the provided regions. Supersede by `--bed_fn`. To call Indel in the whole genome, input a BED covering the whole genome.                    
   --do_not_print_nonsomatic_calls
                         Do not print those non-somatic variants tagged by `--panel_of_normals`.
 ```
@@ -381,19 +392,20 @@ Then:
 
 ## Tagging non-somatic variant using panel of normals
 
-ClairS-TO by default tags variants if they exist in provided panel of normals (PoNs, i.e., `gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `dbsnp.b138.non-somatic.sites.vcf.gz`, and `1000g-pon.sites.vcf.gz`), and pass the filters listed in the table below. 
+ClairS-TO by default tags variants if they exist in provided panel of normals (PoNs, i.e., `gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `dbsnp.b138.non-somatic.sites.vcf.gz`, `1000g-pon.sites.vcf.gz`, and `CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz`), and pass the filters listed in the table below. 
 
 Users can also use their own PoNs for tagging using the `--panel_of_normals` option. 
 
-Particularly, if the `--panel_of_normals` option is not specified, the three default PoNs will be included. And if users want to use all/part/none of the default PoNs as well as their own PoNs, corresponding file paths of the default PoNs (i.e., `${CONDA_PREFIX}/bin/clairs-to_databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `${CONDA_PREFIX}/bin/clairs-to_databases/dbsnp.b138.non-somatic.sites.vcf.gz`, and `${CONDA_PREFIX}/bin/clairs-to_databases/1000g-pon.sites.vcf.gz`), and their own PoNs, should be included in the `--panel_of_normals` option, split by `,`. 
+Particularly, if the `--panel_of_normals` option is not specified, the four default PoNs will be included. And if users want to use all/part/none of the default PoNs as well as their own PoNs, corresponding file paths of the default PoNs (i.e., `${CONDA_PREFIX}/bin/clairs-to_databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `${CONDA_PREFIX}/bin/clairs-to_databases/dbsnp.b138.non-somatic.sites.vcf.gz`, `${CONDA_PREFIX}/bin/clairs-to_databases/1000g-pon.sites.vcf.gz`, and `${CONDA_PREFIX}/bin/clairs-to_databases/CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz`), and their own PoNs, should be included in the `--panel_of_normals` option, split by `,`. 
 
-In addition, we recommend using `--panel_of_normals_require_allele_matching` option that takes comma separated booleans to indicate whether to require allele matching for each of the PoNs given in `--panel_of_normals`. By default, allele matching is enabled when using germline variants sources (e.g., gnomAD, dbSNP) for non-somatic tagging, and is disabled when using panels (e.g., 1000G PoN).
+In addition, we recommend using `--panel_of_normals_require_allele_matching` option that takes comma separated booleans to indicate whether to require allele matching for each of the PoNs given in `--panel_of_normals`. By default, allele matching is enabled when using germline variants sources (e.g., gnomAD, dbSNP) for non-somatic tagging, and is disabled when using panels (e.g., 1000G PoN, CoLoRSdb).
 
-| Default PoNs |                                        URL                                         | Source |                                                    Source URL                                                    |      Last visited        | Total #Variants  |        Filters        | #Variants used for tagging | Remaining Columns in the input   |
-|:-------------:|:----------------------------------------------------------------------------------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:------------------------:|:----------------:|:---------------------:|:--------------------------:|:--------------------------------:|
-|   PoN 1    | http://www.bio8.cs.hku.hk/clairs-to/databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz |  GATK gnomAD  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            | July 10, 2023 PM10∶34∶07 |   268,225,276    | Sites with AF ≥ 0.001 |         35,551,905         |     #CHROM  POS ID  REF ALT      |
-|   PoN 2   | http://www.bio8.cs.hku.hk/clairs-to/databases/dbsnp.b138.non-somatic.sites.vcf.gz  |  GATK dbSNP  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf | July 10, 2023 PM10∶42∶22 |    60,691,395    |   Non-Somatic sites   |         60,683,019         |     #CHROM  POS ID  REF ALT      |
-|   PoN 3   |        http://www.bio8.cs.hku.hk/clairs-to/databases/1000g-pon.sites.vcf.gz        |  GATK 1000G PoN  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               | July 10, 2023 PM10∶31∶32 |    2,609,566     |       All sites       |         2,609,566          |     #CHROM  POS ID  REF ALT      |
+| Default PoNs |                                                     URL                                                      | Source |                                                    Source URL                                                    |        Last visited         | Total #Variants |        Filters         | #Variants used for tagging | Remaining Columns in the input   |
+|:------------:|:------------------------------------------------------------------------------------------------------------:|:------:|:----------------------------------------------------------------------------------------------------------------:|:---------------------------:|:---------------:|:----------------------:|:--------------------------:|:--------------------------------:|
+|    PoN 1     |              http://www.bio8.cs.hku.hk/clairs-to/databases/gnomad.r2.1.af-ge-0.001.sites.vcf.gz              |  GATK gnomAD  |            https://storage.googleapis.com/gatk-best-practices/somatic-hg38/af-only-gnomad.hg38.vcf.gz            |  July 10, 2023 PM10∶34∶07   |   268,225,276   | Sites with AF ≥ 0.001  |         35,551,905         |     #CHROM  POS ID  REF ALT      |
+|    PoN 2     |              http://www.bio8.cs.hku.hk/clairs-to/databases/dbsnp.b138.non-somatic.sites.vcf.gz               |  GATK dbSNP  | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf |  July 10, 2023 PM10∶42∶22   |   60,691,395    |   Non-Somatic sites    |         60,683,019         |     #CHROM  POS ID  REF ALT      |
+|    PoN 3     |                     http://www.bio8.cs.hku.hk/clairs-to/databases/1000g-pon.sites.vcf.gz                     |  GATK 1000G PoN  |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               |  July 10, 2023 PM10∶31∶32   |    2,609,566    |       All sites        |         2,609,566          |     #CHROM  POS ID  REF ALT      |
+|    PoN 4     | http://www.bio8.cs.hku.hk/clairs-to/databases/CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz  |  GATK 1000G PoN  |           https://zenodo.org/records/13145123/files/CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.vcf.gz            | August 21, 2024 PM10∶36∶10  |   49,550,902    | Sites with AF ≥ 0.001  |         41,175,834         |     #CHROM  POS ID  REF ALT      |
 
 ------
 
