@@ -12,6 +12,10 @@ import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
+import sys
+import math
+from shared.utils import IUPAC_base_to_num_dict as BASE2NUM
+
 HIGH_QUAL_SNV = 12
 LOW_AF_SNV = 0.1
 HIGH_QUAL_INDEL = 20
@@ -19,6 +23,8 @@ LOW_AF_INDEL = 0.3
 min_hom_germline_af = 0.75
 eps = 0.5
 eps_rse = 0.2
+sequence_entropy_threshold = 0.9
+flanking = 100
 
 def delete_lines_after(target_str, delimiter):
     lines = target_str.split('\n')
@@ -87,6 +93,76 @@ def fisher_exact(table):
     return p
 
 
+def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
+    """
+    We use a kmer-based sequence entropy calculation to measure the complexity of a region.
+    sequence: a chunked sequence around a candidate position, default no_of_positions = flankingBaseNum + 1 + flankingBaseNum
+    entropy_window: a maximum entropy window for scanning, if the sequence is larger than the entropy window, a slide
+    window would be adopted for measurement.
+    kmer: default kmer size for sequence entropy calculation.
+    """
+
+    count_repeat_kmer_counts = [0] * (entropy_window + 2)
+    count_repeat_kmer_counts[0] = entropy_window
+
+    entropy = [0.0] * (entropy_window + 2)
+    for i in range(1, entropy_window + 2):
+        e = 1.0 / entropy_window * i
+        entropy[i] = e * math.log(e)
+    entropy_mul = -1 / math.log(entropy_window)
+    entropy_kmer_space = 1 << (2 * kmer)
+
+    kmer_hash_counts = [0] * entropy_kmer_space  # value should smaller than len(seq)
+    mask = -1 if kmer > 15 else ~((-1) << (2 * kmer))
+    kmer_suffix, kmer_prefix = 0, 0
+
+    i = 0
+    i2 = -entropy_window
+    entropy_sum = 0.0
+    all_entropy_sum = [0.0] * len(sequence)
+    while (i2 < len(sequence)):
+
+        if (i < len(sequence)):
+            n = BASE2NUM[sequence[i]]
+            kmer_suffix = ((kmer_suffix << 2) | n) & mask
+
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_suffix]] -= 1
+            entropy_sum -= entropy[kmer_hash_counts[kmer_suffix]]
+            kmer_hash_counts[kmer_suffix] += 1
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_suffix]] += 1
+            entropy_sum += entropy[kmer_hash_counts[kmer_suffix]]
+
+        if i2 >= 0 and i < len(sequence):
+            n2 = BASE2NUM[sequence[i2]]
+            kmer_prefix = ((kmer_prefix << 2) | n2) & mask  # add base info
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_prefix]] -= 1
+            entropy_sum -= entropy[kmer_hash_counts[kmer_prefix]]
+            kmer_hash_counts[kmer_prefix] -= 1
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_prefix]] += 1
+            entropy_sum += entropy[kmer_hash_counts[kmer_prefix]]
+            all_entropy_sum[i] = entropy_sum
+        i += 1
+        i2 += 1
+    return entropy_sum * entropy_mul
+
+
+def sqeuence_entropy_from(reference_sequence):
+    """
+    Calculate sequence entropy in a specific candidate windows, variants in low sequence entropy regions (low
+    mappability regions, such as homopolymer, tandem repeat, segmental duplications regions) would more likely have
+    more complex variants representation, which is beyond pileup calling. Hence, those candidate variants are re-called by
+    full alignment calling.
+    We use a kmer-based sequence entropy calculation to measure the complexity of a region, we would directly query the
+    chunked reference sequence for sequence entropy calculation for each candidate variant.
+    """
+
+    entropy_window = param.no_of_positions
+    ref_seq = reference_sequence[flanking - param.flankingBaseNum : flanking + param.flankingBaseNum + 1]
+    sequence_entropy = calculate_sequence_entropy(sequence=ref_seq, entropy_window=entropy_window)
+
+    return sequence_entropy
+
+
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -146,6 +222,7 @@ def haplotype_filter_per_pos(args):
     pass_mq = True
     pass_co_exist = True
     pass_strand_bias = True
+    pass_sequence_entropy = True
     match_count, ins_length = 0, 0
     hetero_germline_set = set()
     homo_germline_set = set()
@@ -449,19 +526,27 @@ def haplotype_filter_per_pos(args):
     base_count_table = [[a0, r0], [a1, r1]]
     p_value = fisher_exact(base_count_table)
     if is_snp and p_value < 0.001 or (a0 == 0 or a1 == 0):
-            pass_strand_bias = False
+        pass_strand_bias = False
     elif not is_snp and p_value < 0.01 or (a0 == 0 or a1 == 0):
-            pass_strand_bias = False
+        pass_strand_bias = False
 
-    pass_hap = (pass_hetero and pass_homo and pass_hetero_both_side and pass_read_start_end and pass_bq and pass_mq and pass_co_exist and pass_strand_bias)
+    if not is_snp:
+        candidate_sequence_entropy = sqeuence_entropy_from(reference_sequence=reference_sequence)
+        if candidate_sequence_entropy < sequence_entropy_threshold:
+            pass_sequence_entropy = False
+
+    pass_hap = (pass_hetero and pass_homo and pass_hetero_both_side and pass_read_start_end and pass_bq and pass_mq and pass_co_exist and pass_strand_bias and pass_sequence_entropy)
 
     print(' '.join([ctg_name, str(pos), str(pass_hap), str(phaseable), str(pass_hetero), str(pass_homo),
-                        str(pass_read_start_end), str(pass_bq), str(pass_mq), str(pass_co_exist), str(pass_hetero_both_side), str(pass_strand_bias), str(round(p_value, 5))]))
+                    str(pass_read_start_end), str(pass_bq), str(pass_mq), str(pass_co_exist),
+                    str(pass_hetero_both_side), str(pass_strand_bias), str(round(p_value, 5)),
+                    str(pass_sequence_entropy)]))
 
 
 def update_filter_info(args, key, row_str, phasable_set, fail_set, fail_pass_hetero_set, fail_pass_homo_set,
                        fail_pass_read_start_end_set, fail_pass_bq_set, fail_pass_mq_set, fail_pass_co_exist_set,
-                       fail_pass_hetero_both_side_set, fail_pass_strand_bias_set, strand_bias_p_value_dict):
+                       fail_pass_hetero_both_side_set, fail_pass_strand_bias_set, strand_bias_p_value_dict,
+                       fail_pass_sequence_entropy_set):
     ctg_name = key[0] if args.ctg_name is None else args.ctg_name
     pos = key[1] if args.ctg_name is None else key
     k = (ctg_name, pos)
@@ -498,6 +583,9 @@ def update_filter_info(args, key, row_str, phasable_set, fail_set, fail_pass_het
     if k in fail_pass_strand_bias_set:
         columns[6] += ";"
         columns[6] += "StrandBias"
+    if k in fail_pass_sequence_entropy_set:
+        columns[6] += ";"
+        columns[6] += "LowSeqEntropy"
     if k in strand_bias_p_value_dict.keys():
         strand_bias_p_value = strand_bias_p_value_dict[k]
         columns[7] += ";"
@@ -628,6 +716,7 @@ def haplotype_filter(args):
     fail_pass_co_exist_set = set()
     fail_pass_hetero_both_side_set = set()
     fail_pass_strand_bias_set = set()
+    fail_pass_sequence_entropy_set = set()
     strand_bias_p_value_dict = dict()
 
     for row in haplotype_filter_process.stdout:
@@ -635,7 +724,7 @@ def haplotype_filter(args):
         if len(columns) < 4:
             continue
         total_num += 1
-        ctg_name, pos, pass_hap, phasable, pass_hetero, pass_homo, pass_read_start_end, pass_bq, pass_mq, pass_co_exist, pass_hetero_both_side, pass_strand_bias, strand_bias_p_value = columns[:13]
+        ctg_name, pos, pass_hap, phasable, pass_hetero, pass_homo, pass_read_start_end, pass_bq, pass_mq, pass_co_exist, pass_hetero_both_side, pass_strand_bias, strand_bias_p_value, pass_sequence_entropy = columns[:14]
         pos = int(pos)
         pass_hap = str2bool(pass_hap)
         pass_hetero = str2bool(pass_hetero)
@@ -646,6 +735,7 @@ def haplotype_filter(args):
         pass_co_exist = str2bool(pass_co_exist)
         pass_hetero_both_side = str2bool(pass_hetero_both_side)
         pass_strand_bias = str2bool(pass_strand_bias)
+        pass_sequence_entropy = str2bool(pass_sequence_entropy)
         phasable = str2bool(phasable)
         if not pass_hap:
             fail_set.add((ctg_name, pos))
@@ -665,6 +755,8 @@ def haplotype_filter(args):
             fail_pass_hetero_both_side_set.add((ctg_name, pos))
         if not pass_strand_bias:
             fail_pass_strand_bias_set.add((ctg_name, pos))
+        if not pass_sequence_entropy:
+            fail_pass_sequence_entropy_set.add((ctg_name, pos))
         strand_bias_p_value_dict[(ctg_name, pos)] = strand_bias_p_value
         if phasable:
             phasable_set.add((ctg_name, pos))
@@ -676,21 +768,25 @@ def haplotype_filter(args):
 
     for key in sorted(pileup_variant_dict.keys()):
         row_str = pileup_variant_dict[key].row_str.rstrip()
-        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, phasable_set, fail_set, fail_pass_hetero_set,
-                       fail_pass_homo_set, fail_pass_read_start_end_set, fail_pass_bq_set, fail_pass_mq_set, fail_pass_co_exist_set,
-                       fail_pass_hetero_both_side_set, fail_pass_strand_bias_set, strand_bias_p_value_dict)
+        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, phasable_set, fail_set,
+                                                            fail_pass_hetero_set,
+                                                            fail_pass_homo_set, fail_pass_read_start_end_set,
+                                                            fail_pass_bq_set, fail_pass_mq_set, fail_pass_co_exist_set,
+                                                            fail_pass_hetero_both_side_set, fail_pass_strand_bias_set,
+                                                            strand_bias_p_value_dict, fail_pass_sequence_entropy_set)
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     p_vcf_writer.close()
 
     print("[INFO] Total input calls: {}, filtered by all hard filers: {}".format(len(input_variant_dict), len(fail_set)))
     print("[INFO] Total input calls: {}, filtered by low alt bq: {}".format(len(input_variant_dict), len(fail_pass_bq_set)))
-    print("[INFO] Total input calls: {}, filtered by low alt mq: {}".format(len(input_variant_dict),len(fail_pass_mq_set)))
+    print("[INFO] Total input calls: {}, filtered by low alt mq: {}".format(len(input_variant_dict), len(fail_pass_mq_set)))
     print("[INFO] Total input calls: {}, filtered by read start and end: {}".format(len(input_variant_dict), len(fail_pass_read_start_end_set)))
     print("[INFO] Total input calls: {}, filtered by variant cluster: {}".format(len(input_variant_dict), len(fail_pass_co_exist_set)))
     print("[INFO] Total input calls: {}, filtered by no ancestry: {}".format(len(input_variant_dict), len(fail_pass_hetero_set) + len(fail_pass_homo_set)))
     print("[INFO] Total input calls: {}, filtered by multi haplotypes: {}".format(len(input_variant_dict), len(fail_pass_hetero_both_side_set)))
     print("[INFO] Total input calls: {}, filtered by strand bias: {}".format(len(input_variant_dict), len(fail_pass_strand_bias_set)))
+    print("[INFO] Total input calls: {}, filtered by low sequence entropy: {}".format(len(input_variant_dict), len(fail_pass_sequence_entropy_set)))
 
 
 def main():
