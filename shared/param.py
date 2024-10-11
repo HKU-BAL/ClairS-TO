@@ -1,6 +1,6 @@
 # parameters
 caller_name = "clairs_to"
-version = "0.2.0"
+version = "0.3.0"
 
 from itertools import accumulate
 
@@ -31,10 +31,13 @@ max_depth = tensor_max_depth + center_padding_depth
 max_tumor_depth = 84
 ont_tensor_max_depth = 128
 ont_max_depth = ont_tensor_max_depth + center_padding_depth
-min_bq_dict = {'ont': 20, 'ont_r10_dorado_sup_4khz': 20, 'ont_r10_dorado_hac_4khz': 15, 'ont_r10_dorado_sup_5khz': 20, 'ont_r10_guppy_sup_4khz': 20, 'ont_r10_guppy_hac_5khz': 15, 'ont_r10_dorado_4khz': 20, 'ont_r10_dorado_5khz': 20, 'ont_r10_guppy': 20, 'ont_r10_guppy_4khz': 20, 'ont_r10_guppy_5khz': 15, 'ilmn': 0, 'hifi': 20, 'hifi_revio': 20}
+min_bq_dict = {'ont': 20, 'ont_r10_dorado_sup_4khz': 20, 'ont_r10_dorado_hac_4khz': 15, 'ont_r10_dorado_sup_5khz': 20, 'ont_r10_dorado_sup_5khz_ss': 20, 'ont_r10_dorado_sup_5khz_ssrs': 20, 'ont_r10_guppy_sup_4khz': 20, 'ont_r10_guppy_hac_5khz': 15, 'ont_r10_dorado_4khz': 20, 'ont_r10_dorado_5khz': 20, 'ont_r10_guppy': 20, 'ont_r10_guppy_4khz': 20, 'ont_r10_guppy_5khz': 15, 'ilmn': 0, 'hifi': 20, 'hifi_revio': 20}
 min_thred_qual = {'ont': 12, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
 min_phaseable_thred_qual = {'ont': 12, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
 min_unphaseable_thred_qual = {'ont': 14, 'ilmn': 4, 'hifi': 12, 'hifi_revio': 12}
+min_thred_qual_indel = {'ont': 20, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
+min_phaseable_thred_qual_indel = {'ont': 20, 'ilmn': 4, 'hifi': 8, 'hifi_revio': 8}
+min_unphaseable_thred_qual_indel = {'ont': 20, 'ilmn': 4, 'hifi': 12, 'hifi_revio': 12}
 best_thred_qual = {'ont': 14, 'ilmn': 6, 'hifi': 12, 'hifi_revio': 12}
 ont_max_tumor_depth = 75
 
