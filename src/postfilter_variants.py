@@ -12,10 +12,16 @@ import shared.param as param
 from shared.vcf import VcfReader, VcfWriter, Position
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
+import sys
+import math
+from shared.utils import IUPAC_base_to_num_dict as BASE2NUM
+
 HIGH_QUAL = 12
 min_hom_germline_af = 0.75
 eps = 0.5
 eps_rse = 0.2
+sequence_entropy_threshold = 0.9
+flanking = 100
 
 def delete_lines_after(target_str, delimiter):
     lines = target_str.split('\n')
@@ -84,6 +90,76 @@ def fisher_exact(table):
     return p
 
 
+def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
+    """
+    We use a kmer-based sequence entropy calculation to measure the complexity of a region.
+    sequence: a chunked sequence around a candidate position, default no_of_positions = flankingBaseNum + 1 + flankingBaseNum
+    entropy_window: a maximum entropy window for scanning, if the sequence is larger than the entropy window, a slide
+    window would be adopted for measurement.
+    kmer: default kmer size for sequence entropy calculation.
+    """
+
+    count_repeat_kmer_counts = [0] * (entropy_window + 2)
+    count_repeat_kmer_counts[0] = entropy_window
+
+    entropy = [0.0] * (entropy_window + 2)
+    for i in range(1, entropy_window + 2):
+        e = 1.0 / entropy_window * i
+        entropy[i] = e * math.log(e)
+    entropy_mul = -1 / math.log(entropy_window)
+    entropy_kmer_space = 1 << (2 * kmer)
+
+    kmer_hash_counts = [0] * entropy_kmer_space  # value should smaller than len(seq)
+    mask = -1 if kmer > 15 else ~((-1) << (2 * kmer))
+    kmer_suffix, kmer_prefix = 0, 0
+
+    i = 0
+    i2 = -entropy_window
+    entropy_sum = 0.0
+    all_entropy_sum = [0.0] * len(sequence)
+    while (i2 < len(sequence)):
+
+        if (i < len(sequence)):
+            n = BASE2NUM[sequence[i]]
+            kmer_suffix = ((kmer_suffix << 2) | n) & mask
+
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_suffix]] -= 1
+            entropy_sum -= entropy[kmer_hash_counts[kmer_suffix]]
+            kmer_hash_counts[kmer_suffix] += 1
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_suffix]] += 1
+            entropy_sum += entropy[kmer_hash_counts[kmer_suffix]]
+
+        if i2 >= 0 and i < len(sequence):
+            n2 = BASE2NUM[sequence[i2]]
+            kmer_prefix = ((kmer_prefix << 2) | n2) & mask  # add base info
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_prefix]] -= 1
+            entropy_sum -= entropy[kmer_hash_counts[kmer_prefix]]
+            kmer_hash_counts[kmer_prefix] -= 1
+            count_repeat_kmer_counts[kmer_hash_counts[kmer_prefix]] += 1
+            entropy_sum += entropy[kmer_hash_counts[kmer_prefix]]
+            all_entropy_sum[i] = entropy_sum
+        i += 1
+        i2 += 1
+    return entropy_sum * entropy_mul
+
+
+def sqeuence_entropy_from(reference_sequence):
+    """
+    Calculate sequence entropy in a specific candidate windows, variants in low sequence entropy regions (low
+    mappability regions, such as homopolymer, tandem repeat, segmental duplications regions) would more likely have
+    more complex variants representation, which is beyond pileup calling. Hence, those candidate variants are re-called by
+    full alignment calling.
+    We use a kmer-based sequence entropy calculation to measure the complexity of a region, we would directly query the
+    chunked reference sequence for sequence entropy calculation for each candidate variant.
+    """
+
+    entropy_window = param.no_of_positions
+    ref_seq = reference_sequence[flanking - param.flankingBaseNum : flanking + param.flankingBaseNum + 1]
+    sequence_entropy = calculate_sequence_entropy(sequence=ref_seq, entropy_window=entropy_window)
+
+    return sequence_entropy
+
+
 def get_base_list(columns):
     pileup_bases = columns[4]
 
@@ -137,6 +213,7 @@ def postfilter_per_pos(args):
     pass_read_start_end = True
     pass_co_exist = True
     pass_strand_bias = True
+    pass_sequence_entropy = True
 
     args.qual = args.qual if args.qual is not None else 102
     args.af = args.af if args.af is not None else 1.0
@@ -296,13 +373,18 @@ def postfilter_per_pos(args):
     if p_value < 0.001:
         pass_strand_bias = False
 
-    pass_hard_filter = (pass_read_start_end and pass_co_exist and pass_strand_bias)
-    
-    print(' '.join([ctg_name, str(pos), str(pass_hard_filter), str(pass_read_start_end), str(pass_co_exist), str(pass_strand_bias), str(round(p_value, 5))]))
+    if not is_snp:
+        candidate_sequence_entropy = sqeuence_entropy_from(reference_sequence=reference_sequence)
+        if candidate_sequence_entropy < sequence_entropy_threshold:
+            pass_sequence_entropy = False
 
+    pass_hard_filter = (pass_read_start_end and pass_co_exist and pass_strand_bias and pass_sequence_entropy)
+
+    print(' '.join([ctg_name, str(pos), str(pass_hard_filter), str(pass_read_start_end), str(pass_co_exist),
+                    str(pass_strand_bias), str(round(p_value, 5)), str(pass_sequence_entropy)]))
 
 def update_filter_info(args, key, row_str, fail_pos_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
-                       fail_pass_strand_bias_set, strand_bias_p_value_dict):
+                       fail_pass_strand_bias_set, strand_bias_p_value_dict, fail_pass_sequence_entropy_set):
     ctg_name = key[0] if args.ctg_name is None else args.ctg_name
     pos = key[1] if args.ctg_name is None else key
     k = (ctg_name, pos)
@@ -323,6 +405,9 @@ def update_filter_info(args, key, row_str, fail_pos_set, fail_pass_read_start_en
     if k in fail_pass_strand_bias_set:
         columns[6] += ";"
         columns[6] += "StrandBias"
+    if k in fail_pass_sequence_entropy_set:
+        columns[6] += ";"
+        columns[6] += "LowSeqEntropy"
     if k in strand_bias_p_value_dict.keys():
         strand_bias_p_value = strand_bias_p_value_dict[k]
         columns[7] += ";"
@@ -412,6 +497,7 @@ def postfilter(args):
     fail_pass_read_start_end_set = set()
     fail_pass_co_exist_set = set()
     fail_pass_strand_bias_set = set()
+    fail_pass_sequence_entropy_set = set()
     strand_bias_p_value_dict = dict()
 
     for row in postfilter_process.stdout:
@@ -419,12 +505,13 @@ def postfilter(args):
         if len(columns) < 4:
             continue
         total_num += 1
-        ctg_name, pos, pass_hard_filter, pass_read_start_end, pass_co_exist, pass_strand_bias, strand_bias_p_value = columns[:7]
+        ctg_name, pos, pass_hard_filter, pass_read_start_end, pass_co_exist, pass_strand_bias, strand_bias_p_value, pass_sequence_entropy = columns[:8]
         pos = int(pos)
         pass_hard_filter = str2bool(pass_hard_filter)
         pass_read_start_end = str2bool(pass_read_start_end)
         pass_co_exist = str2bool(pass_co_exist)
         pass_strand_bias = str2bool(pass_strand_bias)
+        pass_sequence_entropy = str2bool(pass_sequence_entropy)
         if not pass_hard_filter:
             fail_set.add((ctg_name, pos))
         if not pass_read_start_end:
@@ -433,6 +520,8 @@ def postfilter(args):
             fail_pass_co_exist_set.add((ctg_name, pos))
         if not pass_strand_bias:
             fail_pass_strand_bias_set.add((ctg_name, pos))
+        if not pass_sequence_entropy:
+            fail_pass_sequence_entropy_set.add((ctg_name, pos))
         strand_bias_p_value_dict[(ctg_name, pos)] = strand_bias_p_value
         if total_num > 0 and total_num % 1000 == 0:
             print("[INFO] Processing in {}, total processed positions: {}".format(ctg_name, total_num))
@@ -442,8 +531,11 @@ def postfilter(args):
 
     for key in sorted(pileup_variant_dict.keys()):
         row_str = pileup_variant_dict[key].row_str.rstrip()
-        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, fail_set, fail_pass_read_start_end_set,
-                       fail_pass_co_exist_set, fail_pass_strand_bias_set, strand_bias_p_value_dict)
+        row_str, is_candidate_filtered = update_filter_info(args, key, row_str, fail_set,
+                                                            fail_pass_read_start_end_set,
+                                                            fail_pass_co_exist_set, fail_pass_strand_bias_set,
+                                                            strand_bias_p_value_dict,
+                                                            fail_pass_sequence_entropy_set)
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     p_vcf_writer.close()
@@ -452,6 +544,7 @@ def postfilter(args):
     print("[INFO] Total input calls: {}, filtered by read start and end: {}".format(len(input_variant_dict), len(fail_pass_read_start_end_set)))
     print("[INFO] Total input calls: {}, filtered by variant cluster: {}".format(len(input_variant_dict), len(fail_pass_co_exist_set)))
     print("[INFO] Total input calls: {}, filtered by strand bias: {}".format(len(input_variant_dict), len(fail_pass_strand_bias_set)))
+    print("[INFO] Total input calls: {}, filtered by low sequence entropy: {}".format(len(input_variant_dict), len(fail_pass_sequence_entropy_set)))
 
 
 def main():
