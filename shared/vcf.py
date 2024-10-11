@@ -25,6 +25,7 @@ vcf_header = dedent("""\
             ##FILTER=<ID=NoAncestry,Description="Variant without an ancestral haplotype support">
             ##FILTER=<ID=MultiHap,Description="Alt alleles existed in multiple haplotypes">
             ##FILTER=<ID=StrandBias,Description="Strand bias p-value <0.001">
+            ##FILTER=<ID=LowSeqEntropy,Description="Sequence entropy <0.9">
             ##FILTER=<ID=Realignment,Description="For short-read, both the count of supporting alt alleles and AF decreased after realignment">
             ##FILTER=<ID=RefCall,Description="Reference call">
             ##INFO=<ID=Verdict_Germline,Number=0,Type=Flag,Description="Variant tagged by verdict as Germline">
