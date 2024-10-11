@@ -276,10 +276,10 @@ def main():
                         help="Pileup VCF input")
 
     parser.add_argument('--panel_of_normals', type=str, default=None,
-                        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' for multiple PoNs. Default: if not specified, provided 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', and '1000g-pon.sites.vcf.gz' PoNs will be included")
+                        help="The path of the panel of normals (PoNs) used for tagging non-somatic variants. Split by ',' for multiple PoNs. Default: if not specified, provided 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', '1000g-pon.sites.vcf.gz', and 'CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz' PoNs will be included")
 
     parser.add_argument('--panel_of_normals_require_allele_matching', type=str, default=None,
-                        help="Whether to require allele matching when using corresponding PoNs. Split by ',' for multiple PoNs. Default: if not specified, using 'True', 'True', and 'False' for 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', and '1000g-pon.sites.vcf.gz' PoNs respectively")
+                        help="Whether to require allele matching when using corresponding PoNs. Split by ',' for multiple PoNs. Default: if not specified, using 'True', 'True', 'False' and 'False' for 'gnomad.r2.1.af-ge-0.001.sites.vcf.gz', 'dbsnp.b138.non-somatic.sites.vcf.gz', '1000g-pon.sites.vcf.gz', and 'CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz' PoNs respectively")
 
     parser.add_argument('--output_vcf_fn', type=str, default=None,
                         help="Output VCF file")
