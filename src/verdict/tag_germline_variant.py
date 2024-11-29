@@ -35,8 +35,8 @@ def tag_germline_variant(args):
 
     tumor_purity = float(open(tumor_purity_path).read().rstrip().split('\n')[1].split('\t')[1])
 
-    if tumor_purity > 0.8:
-        print("[WARNING] Tumor purity estimation {} is higher than 0.8, not applying verdict tagging!".format(tumor_purity))
+    if tumor_purity > 0.6:
+        print("[WARNING] Tumor purity estimation {} is higher than 0.6, not applying verdict tagging!".format(tumor_purity))
         return
 
     input_vcf_reader = VcfReader(
@@ -120,7 +120,7 @@ def tag_germline_variant(args):
                 else:
                     logodds = log10(max_prob_germline) - log10(max_prob_somatic)
 
-                if frequency < 0.05 and 0.2 < p < 0.8:
+                if frequency < 0.05 and 0.2 < p < 0.6:
                     SG_status = 'subclonal somatic'
                     columns[7] += ';Verdict_SubclonalSomatic'
 
