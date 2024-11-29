@@ -89,19 +89,23 @@ Check [Usage](#Usage) for more options.
 
 ClairS-TO trained both Affirmative and Negational models using GIAB samples, and carry on benchmarking on HCC1395 tumor sample dataset. All models were trained with chr20 excluded (including only chr1-19, 21, 22). 
 
-|     Platform      |        Model name         |      Chemistry /Instruments      | Basecaller | Latest update |    Option (`-p/--platform`)    |   Reference   |  Aligner   |
-|:-----------------:|:-------------------------:|:--------------------------------:|:----------:|:-------------:|:------------------------------:|:-------------:|:----------:|
-| ONT <sup>1</sup>  | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Sep. 30, 2024 | `ont_r10_dorado_sup_5khz_ssrs` | GRCh38_no_alt |  Minimap2  |
-| ONT <sup>1</sup>  | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 | `ont_r10_dorado_sup_5khz_ss`   | GRCh38_no_alt |  Minimap2  |
-|        ONT        | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 |   `ont_r10_dorado_sup_5khz`    | GRCh38_no_alt |  Minimap2  |
-|        ONT        | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           | Dorado SUP | Nov. 10, 2023 |   `ont_r10_dorado_sup_4khz`    | GRCh38_no_alt |  Minimap2  |
-|        ONT        | r1041_e82_400bps_hac_v410 |          R10.4.1, 4khz           | Dorado HAC | Jan. 19, 2024 |   `ont_r10_dorado_hac_4khz`    | GRCh38_no_alt |  Minimap2  |
-|        ONT        | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           | Guppy6 SUP | Nov. 10, 2023 |    `ont_r10_guppy_sup_4khz`    | GRCh38_no_alt |  Minimap2  |
-|        ONT        | r1041_e82_400bps_hac_g657 |          R10.4.1, 5khz           | Guppy6 HAC | Jan. 21, 2024 |    `ont_r10_guppy_hac_5khz`    | GRCh38_no_alt |  Minimap2  |
-|     Illumina      |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 10, 2023 |             `ilmn`             |    GRCh38     |  BWA-MEM   |
-|    PacBio HiFi    |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 10, 2023 |          `hifi_revio`          | GRCh38_no_alt |  Minimap2  |
+|               Platform               |        Model name         |      Chemistry /Instruments      | Basecaller | Latest update |     Option (`-p/--platform`)      |   Reference   |  Aligner   |
+|:------------------------------------:|:-------------------------:|:--------------------------------:|:----------:|:-------------:|:---------------------------------:|:-------------:|:----------:|
+|           ONT <sup>1</sup>           | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 20, 2024 |  `ont_r10_dorado_sup_5khz_ssrs`   | GRCh38_no_alt |  Minimap2  |
+|           ONT <sup>1</sup>           | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 |   `ont_r10_dorado_sup_5khz_ss`    | GRCh38_no_alt |  Minimap2  |
+|                 ONT                  | r1041_e82_400bps_sup_v420 |          R10.4.1, 5khz           | Dorado SUP | Nov. 10, 2023 |     `ont_r10_dorado_sup_5khz`     | GRCh38_no_alt |  Minimap2  |
+|                 ONT                  | r1041_e82_400bps_sup_v410 |          R10.4.1, 4khz           | Dorado SUP | Nov. 10, 2023 |     `ont_r10_dorado_sup_4khz`     | GRCh38_no_alt |  Minimap2  |
+|                 ONT                  | r1041_e82_400bps_hac_v410 |          R10.4.1, 4khz           | Dorado HAC | Jan. 19, 2024 |     `ont_r10_dorado_hac_4khz`     | GRCh38_no_alt |  Minimap2  |
+|                 ONT                  | r1041_e82_400bps_sup_g615 |          R10.4.1, 4khz           | Guppy6 SUP | Nov. 10, 2023 |     `ont_r10_guppy_sup_4khz`      | GRCh38_no_alt |  Minimap2  |
+|                 ONT                  | r1041_e82_400bps_hac_g657 |          R10.4.1, 5khz           | Guppy6 HAC | Jan. 21, 2024 |     `ont_r10_guppy_hac_5khz`      | GRCh38_no_alt |  Minimap2  |
+|        Illumina <sup>1</sup>         |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 20, 2024 |            `ilmn_ssrs`            |    GRCh38     |  BWA-MEM   |
+|        Illumina <sup>1</sup>         |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 10, 2023 |             `ilmn_ss`             |    GRCh38     |  BWA-MEM   |
+|               Illumina               |           ilmn            |          NovaSeq/HiseqX          |     -      | Nov. 10, 2023 |              `ilmn`               |    GRCh38     |  BWA-MEM   |
+|       PacBio HiFi <sup>1</sup>       |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 20, 2024 |         `hifi_revio_ssrs`         | GRCh38_no_alt |  Minimap2  |
+|       PacBio HiFi <sup>1</sup>       |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 10, 2023 |          `hifi_revio_ss`          | GRCh38_no_alt |  Minimap2  |
+|             PacBio HiFi              |        hifi_revio         | Revio with SMRTbell prep kit 3.0 |     -      | Nov. 10, 2023 |           `hifi_revio`            | GRCh38_no_alt |  Minimap2  |
 
-**Caveats <sup>1</sup>**: Starting from v0.3.0 version, ClairS-TO will provide two model types. `ssrs` is a model trained initially with synthetic samples and then real samples augmented (e.g., `ont_r10_dorado_sup_5khz_ssrs`), `ss` is a model trained from synthetic samples (e.g., `ont_r10_dorado_sup_5khz_ss`). The `ssrs` model provides better performance and fits most usage scenarios. `ss` model can be used when missing a cancer-type in model training is a concern. In v0.3.0, four real cancer cell-line datasets (HCC1937, HCC1954, H1437, and H2009) covering two cancer types (breast cancer, lung cancer) published by [Park et al.](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1) were used for `ssrs` model training.
+**Caveats <sup>1</sup>**: Starting from v0.3.0 version, ClairS-TO will provide two model types. `ssrs` is a model trained initially with synthetic samples and then real samples augmented (e.g., `ont_r10_dorado_sup_5khz_ssrs`, `ilmn_ssrs`, `hifi_revio_ssrs`), `ss` is a model trained from synthetic samples (e.g., `ont_r10_dorado_sup_5khz_ss`, `ilmn_ss`, `hifi_revio_ss`). The `ssrs` model provides better performance and fits most usage scenarios. `ss` model can be used when missing a cancer-type in model training is a concern. In v0.3.0, four real cancer cell-line datasets (HCC1937, HCC1954, H1437, and H2009) covering two cancer types (breast cancer, lung cancer) published by [Park et al.](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1) were used for `ssrs` model training.
 
 ------
 
@@ -123,7 +127,7 @@ docker run -it \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
-  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}
   --output_dir ${OUTPUT_DIR}                   ## output path prefix 
 ```
 
@@ -153,7 +157,7 @@ singularity exec \
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \      ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \               ## use your reference file name here
   --threads ${THREADS} \                       ## maximum threads to be used
-  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                     ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}
   --output_dir ${OUTPUT_DIR} \                 ## output path prefix
   --conda_prefix /opt/micromamba/envs/clairs-to
 ```
@@ -256,7 +260,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   --tumor_bam_fn ${INPUT_DIR}/tumor.bam \    ## use your tumor bam file name here
   --ref_fn ${INPUT_DIR}/ref.fa \             ## use your reference file name here
   --threads ${THREADS} \                     ## maximum threads to be used
-  --platform ${PLATFORM} \                   ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}
+  --platform ${PLATFORM} \                   ## options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}
   --output_dir ${OUTPUT_DIR}                 ## output path prefix
  
 ## Final SNV output VCF file: output/snv.vcf.gz
@@ -272,7 +276,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
   -R, --ref_fn FASTA                Reference file input. The input file must be samtools indexed.
   -o, --output_dir OUTPUT_DIR       VCF output directory.
   -t, --threads THREADS             Max threads to be used.
-  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}.
+  -p, --platform PLATFORM           Select the sequencing platform of the input. Possible options {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}.
 ```
 
 **Commonly used parameters:**
