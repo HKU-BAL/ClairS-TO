@@ -538,9 +538,9 @@ def check_args(args):
 
     if not args.disable_indel_calling and args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs',
                              'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz',
-                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn',
-                             'hifi_revio'}:
-        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ilmn', and 'hifi_revio' platform"))
+                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'ilmn_ss', 'ilmn_ssrs',
+                             'hifi_revio', 'hifi_revio_ss', 'hifi_revio_ssrs'}:
+        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ilmn', ilmn_ss', 'ilmn_ssrs', 'hifi_revio', 'hifi_revio_ss', and 'hifi_revio_ssrs' platform"))
 
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
@@ -564,6 +564,18 @@ def check_args(args):
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
             args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               'ont_r10_guppy_hac_5khz', 'pileup_affirmative.pkl')
+        elif args.platform == 'ilmn' or args.platform == 'ilmn_ss':
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ilmn', 'pileup_affirmative.pkl')
+        elif args.platform == 'ilmn_ssrs':
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'ilmn_ssrs', 'pileup_affirmative.pkl')
+        elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss':
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'hifi_revio', 'pileup_affirmative.pkl')
+        elif args.platform == 'hifi_revio_ssrs':
+            args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                              'hifi_revio_ssrs', 'pileup_affirmative.pkl')
         else:
             args.snv_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                               args.platform, 'pileup_affirmative.pkl')
@@ -587,6 +599,18 @@ def check_args(args):
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
             args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              'ont_r10_guppy_hac_5khz', 'pileup_negational.pkl')
+        elif args.platform == 'ilmn' or args.platform == 'ilmn_ss':
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ilmn', 'pileup_negational.pkl')
+        elif args.platform == 'ilmn_ssrs':
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'ilmn_ssrs', 'pileup_negational.pkl')
+        elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss':
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'hifi_revio', 'pileup_negational.pkl')
+        elif args.platform == 'hifi_revio_ssrs':
+            args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                             'hifi_revio_ssrs', 'pileup_negational.pkl')
         else:
             args.snv_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                              args.platform, 'pileup_negational.pkl')
@@ -613,6 +637,12 @@ def check_args(args):
         elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
             args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                        'ont_r10_guppy_hac_5khz', 'likelihood_matrix.txt')
+        elif args.platform == 'ilmn' or args.platform == 'ilmn_ss' or args.platform == 'ilmn_ssrs':
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'ilmn', 'likelihood_matrix.txt')
+        elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss' or args.platform == 'hifi_revio_ssrs':
+            args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                       'hifi_revio', 'likelihood_matrix.txt')
         else:
             args.snv_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
                                                        'likelihood_matrix.txt')
@@ -638,6 +668,18 @@ def check_args(args):
             elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
                 args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                                   'ont_r10_guppy_hac_5khz', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ilmn' or args.platform == 'ilmn_ss':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ilmn', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'ilmn_ssrs':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'ilmn_ssrs', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'hifi_revio', 'indel', 'pileup_affirmative.pkl')
+            elif args.platform == 'hifi_revio_ssrs':
+                args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                  'hifi_revio_ssrs', 'indel', 'pileup_affirmative.pkl')
             else:
                 args.indel_pileup_affirmative_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                                   args.platform, 'indel', 'pileup_affirmative.pkl')
@@ -662,6 +704,19 @@ def check_args(args):
             elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
                 args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                                   'ont_r10_guppy_hac_5khz', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ilmn' or args.platform == 'ilmn_ss':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                        'ilmn', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'ilmn_ssrs':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                        'ilmn_ssrs', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                        'hifi_revio', 'indel', 'pileup_negational.pkl')
+            elif args.platform == 'hifi_revio_ssrs':
+                args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                                        'hifi_revio_ssrs', 'indel',
+                                                                        'pileup_negational.pkl')
             else:
                 args.indel_pileup_negational_model_path = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                                   args.platform, 'indel', 'pileup_negational.pkl')
@@ -689,6 +744,12 @@ def check_args(args):
             elif args.platform == 'ont_r10_guppy_hac_5khz' or args.platform == 'ont_r10_guppy_5khz':
                 args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
                                                            'ont_r10_guppy_hac_5khz', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'ilmn' or args.platform == 'ilmn_ss' or args.platform == 'ilmn_ssrs':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'ilmn', 'indel', 'likelihood_matrix.txt')
+            elif args.platform == 'hifi_revio' or args.platform == 'hifi_revio_ss' or args.platform == 'hifi_revio_ssrs':
+                args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models',
+                                                           'hifi_revio', 'indel', 'likelihood_matrix.txt')
             else:
                 args.indel_likelihood_matrix_data = os.path.join(args.conda_prefix, 'bin', 'clairs-to_models', args.platform,
                                                            'indel', 'likelihood_matrix.txt')
@@ -791,13 +852,13 @@ def check_args(args):
 
     if args.platform not in {'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs',
                              'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz',
-                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn',
-                             'hifi_revio'}:
+                             'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'ilmn_ss', 'ilmn_ssrs',
+                             'hifi_revio', 'hifi_revio_ss', 'hifi_revio_ssrs'}:
         logging(log_error(
-            '[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}'))
+            '[ERROR] Invalid platform input, optional: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}'))
 
     if args.qual is None:
-        if args.platform != "ont_r10_dorado_sup_5khz_ssrs":
+        if args.platform not in ["ont_r10_dorado_sup_5khz_ssrs", "ilmn_ssrs", "hifi_revio_ssrs"]:
             args.qual = param.min_thred_qual[args.platform] if args.platform in param.min_thred_qual else param.min_thred_qual['ont']
             if args.qual_cutoff_phaseable_region is None:
                 args.qual_cutoff_phaseable_region = param.min_phaseable_thred_qual[
@@ -821,9 +882,9 @@ def check_args(args):
             args.qual = 4
             args.qual_cutoff_phaseable_region = args.qual
             args.qual_cutoff_unphaseable_region = args.qual
-            args.qual_indel = args.qual
-            args.qual_indel_cutoff_phaseable_region = args.qual
-            args.qual_indel_cutoff_unphaseable_region = args.qual
+            args.qual_indel = 2
+            args.qual_indel_cutoff_phaseable_region = args.qual_indel
+            args.qual_indel_cutoff_unphaseable_region = args.qual_indel
     else:
         if args.qual_cutoff_phaseable_region is not None or args.qual_cutoff_unphaseable_region is not None:
             logging(log_warning(
@@ -1720,7 +1781,7 @@ def somatic_parser():
         required=True,
         type=str,
         default=None,
-        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, hifi_revio}."
+        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}."
     )
 
     optional_params = parser.add_argument_group('Commonly used parameters')
@@ -2091,7 +2152,7 @@ def somatic_parser():
     other_params.add_argument(
         "--disable_verdict",
         action='store_true',
-        help="Disable using verdict to tag the variants in CNA regions. We suggest using the parameter only for sample with tumor purity estimation lower than 0.8. Default: enabled."
+        help="Disable using verdict to tag the variants in CNA regions. We suggest using the parameter only for sample with tumor purity estimation lower than 0.6. Default: enabled."
     )
 
     ## Phase tumor BAM in calling
