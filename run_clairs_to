@@ -1012,6 +1012,9 @@ def print_args(args):
     if args.platform.startswith('hifi'):
         args.platform = 'hifi'
 
+    if args.platform.startswith('ilmn'):
+        args.platform = 'ilmn'
+
     if args.cmdline is not None and args.cmdline != "":
         with open(args.output_dir + '/tmp/CMD', 'w') as f:
             f.write(args.cmdline + '\n')
