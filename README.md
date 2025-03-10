@@ -2,7 +2,7 @@
     <img src="images/ClairS-TO_icon.png" width="200" alt="ClairS-TO">
 </div>
 
-# ClairS-TO - a deep-learning method for tumor-only somatic small variant calling
+# ClairS-TO - a deep-learning method for long-read tumor-only somatic small variant calling
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
@@ -13,16 +13,16 @@ Email: {rbluo,zxzheng,lchen}@cs.hku.hk
 
 ## Introduction
 
-ClairS-TO (Somatic Tumor-Only) is a tool in the Clair series to support long-read somatic small variant calling with only tumor samples available.
+ClairS-TO (Somatic Tumor-Only) is a tool in the Clair series to support long-read tumor-only somatic small variant calling.
 
-Without a normal sample, non-somatic noises cannot be identified by finding common signals between a paired tumor and normal. The variant caller itself needs to be more proficient in telling noises from somatic signals.
+Without a matched normal sample, non-somatic noises cannot be identified by finding common signals between a paired tumor and normal. The variant caller itself needs to be more proficient in telling somatic variants apart from germline variants and background noises.
 
-In ClairS-TO, we use an ensemble of two neural networks with opposite objectives. With the same input, an Affirmative NN determines how likely a candidate is a somatic variant - P(*Y<sub>Aff</sub>*), and a Negational NN determines how likely a candidate is NOT a somatic variant - P(*Y<sub>Neg</sub>*). A conditional probability P(*Y<sub>Aff</sub>* | *Y<sub>Neg</sub>*) that determines how likely a candidate is a somatic variant given the probability that the candidate is not a somatic variant is calculated from the probability of both networks. A somatic variant candidate that doesn't look like a noise usually has a high P(*Y<sub>Aff</sub>*) but a low P(*Y<sub>Neg</sub>*), while a somatic variant candidate that can also be a noise can have both a high P(*Y<sub>Aff</sub>*) and a high P(*Y<sub>Neg</sub>*).
+In ClairS-TO, we use an ensemble of two disparate neural networks that were trained from the same samples but for two exact opposite tasks – an affirmative neural network (AFF) that determines how likely a candidate is a somatic variant – *P<sub>AFF</sub>(y|x)*, and a negational neural network (NEG) that determines how likely a candidate is not a somatic variant – *P<sub>NEG</sub>(&not;y|x)*. A posterior probability – *P(y|(P<sub>AFF</sub>(y|x), 1 - P<sub>NEG</sub>(&not;y|x)))* – for each variant candidate is calculated from the outputs of the two networks and prior probabilities derived from the training samples.
 
-Below is a workflow of ClairS-TO.
+Below is a somatic variant calling workflow of ClairS-TO.
 ![ClairS-TO Workflow](images/ClairS-TO_architecture.png)
 
-Like other tumor-only somatic variant callers, ClairS-TO accepts panel of normals (PoNs) as input to remove non-somatic variants.
+Like other tumor-only somatic variant callers, ClairS-TO also applies multiple post-calling filters, including 1) nine hard-filters, 2) four public plus any number of user-supplied panels of normals (PoNs), and 3) a module that statistically separates somatic and germline variants using estimated tumor purity and copy number profile.
 
 For somatic variant calling using paired tumor/normal samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
 
@@ -31,7 +31,23 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 ## Performance figures
 
 ### ONT Q20+ chemistry performance
-The latest performance figures as of Oct. 10th, 2024 (ClairS-TO v0.3.0) is available in this [technical note](https://github.com/HKU-BAL/ClairS/blob/main/docs/Improving_the_performance_of_ClairS_and_ClairS-TO_with_new_real_cancer_cell-line_datasets_and_PoN.pdf).
+#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the Precision-Recall curves at 25-, 50-, and 75-fold tumor coverages of ONT COLO829 and HCC1395 datasets. 
+
+![](images/ONT_performance_AUPRC.png)
+
+#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the best achievable F1-score, along with the corresponding precision and recall, at 25-, 50-, and 75-fold tumor coverages of ONT COLO829 and HCC1395 datasets.
+
+![](images/ONT_performance_F1.png)
+
+### PacBio Revio performance
+#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic at 50-fold tumor coverage of PacBio Revio COLO829 dataset. 
+
+![](images/Pacbio_performance.png)
+
+### Illumina performance
+#### Performance comparison between ClairS-TO (SS and SSRS model), Mutect2, Octopus, Pisces, and DeepSomatic at 50-fold tumor coverage of Illumina COLO829 dataset. 
+
+![](images/Illumina_performance.png)
 
 ## Contents
 - [Latest Updates](#latest-updates)
@@ -49,6 +65,8 @@ The latest performance figures as of Oct. 10th, 2024 (ClairS-TO v0.3.0) is avail
 ------
 
 ## Latest Updates
+
+*v0.4.0 (Mar. 10, 2025)* : Updated ensemble of AFF and NEG networks for improved performance.
 
 *v0.3.1 (Nov. 29, 2024)* : Added `ssrs` model for PacBio Revio (`hifi_revio_ssrs`) and Illumina (`ilmn_ssrs`) platforms.
 
@@ -396,9 +414,9 @@ Then:
 
 ------
 
-## Tagging non-somatic variant using panel of normals
+## Tagging non-somatic variant using panels of normals (PoNs)
 
-ClairS-TO by default tags variants if they exist in provided panel of normals (PoNs, i.e., `gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `dbsnp.b138.non-somatic.sites.vcf.gz`, `1000g-pon.sites.vcf.gz`, and `CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz`), and pass the filters listed in the table below. 
+ClairS-TO by default tags variants if they exist in provided panels of normals (PoNs, i.e., `gnomad.r2.1.af-ge-0.001.sites.vcf.gz`, `dbsnp.b138.non-somatic.sites.vcf.gz`, `1000g-pon.sites.vcf.gz`, and `CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz`), and pass the filters listed in the table below. 
 
 Users can also use their own PoNs for tagging using the `--panel_of_normals` option. 
 
