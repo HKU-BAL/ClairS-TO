@@ -1241,7 +1241,7 @@ def somatic_calling(args):
         echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
         gf_command = '( ' + time + args.parallel
         gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_3_nonsomatic_tagging_snv.log'
-        gf_command += ' -j ' + str(args.threads)
+        gf_command += ' -j ' + str(args.threads if args.threads < 8 else 8)
         gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
         gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
         gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_nonsomatic_tagging_{1}.vcf'
@@ -1564,7 +1564,7 @@ def somatic_calling(args):
             echo_list.append("[INFO] STEP 7: Non-somatic Tagging for Indel Variants")
             indel_gf_command = '( ' + time + args.parallel
             indel_gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_7_nonsomatic_tagging_indel.log'
-            indel_gf_command += ' -j ' + str(args.threads)
+            indel_gf_command += ' -j ' + str(args.threads if args.threads < 8 else 8)
             indel_gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
             indel_gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup.vcf'
             indel_gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_nonsomatic_tagging_{1}.vcf'
