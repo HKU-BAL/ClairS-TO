@@ -179,33 +179,39 @@ def output_vcf_from_probability(
         likelihood_nt_points_with_zero_one = likelihood_data_info_list[11]
 
         a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
-        na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
+        na_index = np.digitize(1 - probabilities_is_na, likelihood_na_points_with_zero_one) - 1
 
         c_index = np.digitize(probabilities_is_c, likelihood_c_points_with_zero_one) - 1
-        nc_index = np.digitize(probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
+        nc_index = np.digitize(1 - probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
 
         g_index = np.digitize(probabilities_is_g, likelihood_g_points_with_zero_one) - 1
-        ng_index = np.digitize(probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
+        ng_index = np.digitize(1 - probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
 
         t_index = np.digitize(probabilities_is_t, likelihood_t_points_with_zero_one) - 1
-        nt_index = np.digitize(probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
+        nt_index = np.digitize(1 - probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
 
         likelihood_a_na_weight = likelihood_a_na[a_index][na_index] + sys.float_info.epsilon
         likelihood_c_nc_weight = likelihood_c_nc[c_index][nc_index] + sys.float_info.epsilon
         likelihood_g_ng_weight = likelihood_g_ng[g_index][ng_index] + sys.float_info.epsilon
         likelihood_t_nt_weight = likelihood_t_nt[t_index][nt_index] + sys.float_info.epsilon
 
-        probs_is_a = likelihood_a_na_weight * (probabilities_is_a / probabilities_is_na)
-        probs_is_c = likelihood_c_nc_weight * (probabilities_is_c / probabilities_is_nc)
-        probs_is_g = likelihood_g_ng_weight * (probabilities_is_g / probabilities_is_ng)
-        probs_is_t = likelihood_t_nt_weight * (probabilities_is_t / probabilities_is_nt)
+        probs_is_a = (probabilities_is_a * (1 - probabilities_is_na) * likelihood_a_na_weight) / (
+                    (probabilities_is_a * (1 - probabilities_is_na) * likelihood_a_na_weight) + (
+                        (1 - probabilities_is_a) * probabilities_is_na * (1 - likelihood_a_na_weight)))
+        probs_is_c = (probabilities_is_c * (1 - probabilities_is_nc) * likelihood_c_nc_weight) / (
+                    (probabilities_is_c * (1 - probabilities_is_nc) * likelihood_c_nc_weight) + (
+                        (1 - probabilities_is_c) * probabilities_is_nc * (1 - likelihood_c_nc_weight)))
+        probs_is_g = (probabilities_is_g * (1 - probabilities_is_ng) * likelihood_g_ng_weight) / (
+                    (probabilities_is_g * (1 - probabilities_is_ng) * likelihood_g_ng_weight) + (
+                        (1 - probabilities_is_g) * probabilities_is_ng * (1 - likelihood_g_ng_weight)))
+        probs_is_t = (probabilities_is_t * (1 - probabilities_is_nt) * likelihood_t_nt_weight) / (
+                    (probabilities_is_t * (1 - probabilities_is_nt) * likelihood_t_nt_weight) + (
+                        (1 - probabilities_is_t) * probabilities_is_nt * (1 - likelihood_t_nt_weight)))
 
         probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t])
-        normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
 
-        p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
-
-        p_is_acgt_value = max(normalized_probs_is_acgt)
+        p_is_acgt_index = np.argmax(probs_is_acgt)
+        p_is_acgt_value = max(probs_is_acgt)
 
         is_a = (p_is_acgt_index == 0)
         is_c = (p_is_acgt_index == 1)
@@ -238,22 +244,22 @@ def output_vcf_from_probability(
         likelihood_nd_points_with_zero_one = likelihood_data_info_list[17]
 
         a_index = np.digitize(probabilities_is_a, likelihood_a_points_with_zero_one) - 1
-        na_index = np.digitize(probabilities_is_na, likelihood_na_points_with_zero_one) - 1
+        na_index = np.digitize(1 - probabilities_is_na, likelihood_na_points_with_zero_one) - 1
 
         c_index = np.digitize(probabilities_is_c, likelihood_c_points_with_zero_one) - 1
-        nc_index = np.digitize(probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
+        nc_index = np.digitize(1 - probabilities_is_nc, likelihood_nc_points_with_zero_one) - 1
 
         g_index = np.digitize(probabilities_is_g, likelihood_g_points_with_zero_one) - 1
-        ng_index = np.digitize(probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
+        ng_index = np.digitize(1 - probabilities_is_ng, likelihood_ng_points_with_zero_one) - 1
 
         t_index = np.digitize(probabilities_is_t, likelihood_t_points_with_zero_one) - 1
-        nt_index = np.digitize(probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
+        nt_index = np.digitize(1 - probabilities_is_nt, likelihood_nt_points_with_zero_one) - 1
 
         i_index = np.digitize(probabilities_is_i, likelihood_i_points_with_zero_one) - 1
-        ni_index = np.digitize(probabilities_is_ni, likelihood_ni_points_with_zero_one) - 1
+        ni_index = np.digitize(1 - probabilities_is_ni, likelihood_ni_points_with_zero_one) - 1
 
         d_index = np.digitize(probabilities_is_d, likelihood_d_points_with_zero_one) - 1
-        nd_index = np.digitize(probabilities_is_nd, likelihood_nd_points_with_zero_one) - 1
+        nd_index = np.digitize(1 - probabilities_is_nd, likelihood_nd_points_with_zero_one) - 1
 
         likelihood_a_na_weight = likelihood_a_na[a_index][na_index] + sys.float_info.epsilon
         likelihood_c_nc_weight = likelihood_c_nc[c_index][nc_index] + sys.float_info.epsilon
@@ -262,19 +268,29 @@ def output_vcf_from_probability(
         likelihood_i_ni_weight = likelihood_i_ni[i_index][ni_index] + sys.float_info.epsilon
         likelihood_d_nd_weight = likelihood_d_nd[d_index][nd_index] + sys.float_info.epsilon
 
-        probs_is_a = likelihood_a_na_weight * (probabilities_is_a / probabilities_is_na)
-        probs_is_c = likelihood_c_nc_weight * (probabilities_is_c / probabilities_is_nc)
-        probs_is_g = likelihood_g_ng_weight * (probabilities_is_g / probabilities_is_ng)
-        probs_is_t = likelihood_t_nt_weight * (probabilities_is_t / probabilities_is_nt)
-        probs_is_i = likelihood_i_ni_weight * (probabilities_is_i / probabilities_is_ni)
-        probs_is_d = likelihood_d_nd_weight * (probabilities_is_d / probabilities_is_nd)
+        probs_is_a = (probabilities_is_a * (1 - probabilities_is_na) * likelihood_a_na_weight) / (
+                    (probabilities_is_a * (1 - probabilities_is_na) * likelihood_a_na_weight) + (
+                        (1 - probabilities_is_a) * probabilities_is_na * (1 - likelihood_a_na_weight)))
+        probs_is_c = (probabilities_is_c * (1 - probabilities_is_nc) * likelihood_c_nc_weight) / (
+                    (probabilities_is_c * (1 - probabilities_is_nc) * likelihood_c_nc_weight) + (
+                        (1 - probabilities_is_c) * probabilities_is_nc * (1 - likelihood_c_nc_weight)))
+        probs_is_g = (probabilities_is_g * (1 - probabilities_is_ng) * likelihood_g_ng_weight) / (
+                    (probabilities_is_g * (1 - probabilities_is_ng) * likelihood_g_ng_weight) + (
+                        (1 - probabilities_is_g) * probabilities_is_ng * (1 - likelihood_g_ng_weight)))
+        probs_is_t = (probabilities_is_t * (1 - probabilities_is_nt) * likelihood_t_nt_weight) / (
+                    (probabilities_is_t * (1 - probabilities_is_nt) * likelihood_t_nt_weight) + (
+                        (1 - probabilities_is_t) * probabilities_is_nt * (1 - likelihood_t_nt_weight)))
+        probs_is_i = (probabilities_is_i * (1 - probabilities_is_ni) * likelihood_i_ni_weight) / (
+                    (probabilities_is_i * (1 - probabilities_is_ni) * likelihood_i_ni_weight) + (
+                        (1 - probabilities_is_i) * probabilities_is_ni * (1 - likelihood_i_ni_weight)))
+        probs_is_d = (probabilities_is_d * (1 - probabilities_is_nd) * likelihood_d_nd_weight) / (
+                    (probabilities_is_d * (1 - probabilities_is_nd) * likelihood_d_nd_weight) + (
+                        (1 - probabilities_is_d) * probabilities_is_nd * (1 - likelihood_d_nd_weight)))
 
         probs_is_acgt = np.array([probs_is_a, probs_is_c, probs_is_g, probs_is_t, probs_is_i, probs_is_d])
-        normalized_probs_is_acgt = probs_is_acgt / np.sum(probs_is_acgt)
 
-        p_is_acgt_index = np.argmax(normalized_probs_is_acgt)
-
-        p_is_acgt_value = max(normalized_probs_is_acgt)
+        p_is_acgt_index = np.argmax(probs_is_acgt)
+        p_is_acgt_value = max(probs_is_acgt)
 
         is_a = (p_is_acgt_index == 0)
         is_c = (p_is_acgt_index == 1)
@@ -436,7 +452,7 @@ def output_vcf_from_probability(
             )
         elif is_reference and not is_a and not is_c and not is_g and not is_t:
             if reference_base == 'A':
-                probabilities_is_a = normalized_probs_is_acgt[0]
+                probabilities_is_a = probs_is_acgt[0]
                 quality_score = quality_score_from(probabilities_is_a)
                 filtration_value = filtration_value_from(
                     quality_score_for_pass=output_config.quality_score_for_pass,
@@ -445,7 +461,7 @@ def output_vcf_from_probability(
                     is_variant=is_variant
                 )
             elif reference_base == 'C':
-                probabilities_is_c = normalized_probs_is_acgt[1]
+                probabilities_is_c = probs_is_acgt[1]
                 quality_score = quality_score_from(probabilities_is_c)
                 filtration_value = filtration_value_from(
                     quality_score_for_pass=output_config.quality_score_for_pass,
@@ -454,7 +470,7 @@ def output_vcf_from_probability(
                     is_variant=is_variant
                 )
             elif reference_base == 'G':
-                probabilities_is_g = normalized_probs_is_acgt[2]
+                probabilities_is_g = probs_is_acgt[2]
                 quality_score = quality_score_from(probabilities_is_g)
                 filtration_value = filtration_value_from(
                     quality_score_for_pass=output_config.quality_score_for_pass,
@@ -463,7 +479,7 @@ def output_vcf_from_probability(
                     is_variant=is_variant
                 )
             elif reference_base == 'T':
-                probabilities_is_t = normalized_probs_is_acgt[3]
+                probabilities_is_t = probs_is_acgt[3]
                 quality_score = quality_score_from(probabilities_is_t)
                 filtration_value = filtration_value_from(
                     quality_score_for_pass=output_config.quality_score_for_pass,
