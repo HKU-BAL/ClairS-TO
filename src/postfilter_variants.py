@@ -16,12 +16,12 @@ import sys
 import math
 from shared.utils import IUPAC_base_to_num_dict as BASE2NUM
 
-HIGH_QUAL = 12
 min_hom_germline_af = 0.75
 eps = 0.5
 eps_rse = 0.2
 sequence_entropy_threshold = 0.9
 flanking = 100
+
 
 def delete_lines_after(target_str, delimiter):
     lines = target_str.split('\n')
@@ -82,7 +82,7 @@ def fisher_exact(table):
         c -= 1
         d += 1
         curP /= a * d
-        if curP <=  t:
+        if curP <= t:
             p_right_side += curP
 
     p += p_right_side
@@ -360,7 +360,7 @@ def postfilter_per_pos(args):
         match_count += 1
 
     depth = sum(ALL_HAP_LIST) if sum(ALL_HAP_LIST) > 0 else 1
-    if match_count >= max_co_exist_read_num or (ins_length / depth > 3 and float(args.qual) < HIGH_QUAL):
+    if match_count >= max_co_exist_read_num or ins_length / depth > 3:
         pass_co_exist = False
 
     a0 = sum(HAP_FORWARD_LIST)
@@ -382,6 +382,7 @@ def postfilter_per_pos(args):
 
     print(' '.join([ctg_name, str(pos), str(pass_hard_filter), str(pass_read_start_end), str(pass_co_exist),
                     str(pass_strand_bias), str(round(p_value, 5)), str(pass_sequence_entropy)]))
+
 
 def update_filter_info(args, key, row_str, fail_pos_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
                        fail_pass_strand_bias_set, strand_bias_p_value_dict, fail_pass_sequence_entropy_set):
@@ -588,7 +589,7 @@ def main():
 
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Absolute path to the 'samtools', samtools version >= 1.10 is required. Default: %(default)s")
-    
+
     # options for advanced users
     parser.add_argument('--enable_postfilter', type=str2bool, default=True,
                         help="EXPERIMENTAL: Apply haplotype filtering to the variant calls")
