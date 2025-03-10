@@ -16,9 +16,7 @@ import sys
 import math
 from shared.utils import IUPAC_base_to_num_dict as BASE2NUM
 
-HIGH_QUAL_SNV = 12
 LOW_AF_SNV = 0.1
-HIGH_QUAL_INDEL = 20
 LOW_AF_INDEL = 0.3
 min_hom_germline_af = 0.75
 eps = 0.5
@@ -323,10 +321,10 @@ def haplotype_filter_per_pos(args):
                 alt_base_mq_set = [mq for key, value, mq in zip(read_name_list, base_list, mq_list) if
                                    len(ref_base) == len(value[1]) and '-' in value[1]]
 
-            if len(alt_base_bq_set) > 0 and sum(alt_base_bq_set) / len(alt_base_bq_set) <= average_min_bq and float(args.qual) < HIGH_QUAL_SNV:
+            if len(alt_base_bq_set) > 0 and sum(alt_base_bq_set) / len(alt_base_bq_set) <= average_min_bq:
                 pass_bq = False
 
-            if len(alt_base_mq_set) > 0 and sum(alt_base_mq_set) / len(alt_base_mq_set) <= average_min_mq and float(args.qual) < HIGH_QUAL_SNV:
+            if len(alt_base_mq_set) > 0 and sum(alt_base_mq_set) / len(alt_base_mq_set) <= average_min_mq:
                 pass_mq = False
 
             for rn in read_name_list:
@@ -371,10 +369,10 @@ def haplotype_filter_per_pos(args):
     MAX = max(hp1, hp2)
     MIN = min(hp1, hp2)
     af = float(args.af)
-    if is_snp and af < LOW_AF_SNV and float(args.qual) < HIGH_QUAL_SNV:
+    if is_snp and af < LOW_AF_SNV:
         if hp1 * hp2 > 0 and (MIN > args.min_alt_coverage or MAX / MIN <= 10):
             pass_hetero_both_side = False
-    elif not is_snp and af < LOW_AF_INDEL and float(args.qual) < HIGH_QUAL_INDEL:
+    elif not is_snp and af < LOW_AF_INDEL:
         if hp1 * hp2 > 0 and (MIN > args.min_alt_coverage or MAX / MIN <= 10):
             pass_hetero_both_side = False
 
@@ -511,7 +509,8 @@ def haplotype_filter_per_pos(args):
             break
 
     depth = sum(ALL_HAP_LIST) if sum(ALL_HAP_LIST) > 0 else 1
-    if match_count >= max_co_exist_read_num or (ins_length / depth > 3 and float(args.qual) < HIGH_QUAL_INDEL):
+
+    if match_count >= max_co_exist_read_num or ins_length / depth > 3:
         pass_co_exist = False
 
     all_hp0, all_hp1, all_hp2 = ALL_HAP_LIST
