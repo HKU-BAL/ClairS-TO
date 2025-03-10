@@ -66,7 +66,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Latest Updates
 
-*v0.4.0 (Mar. 10, 2025)* : Updated ensemble of AFF and NEG networks for improved performance.
+*v0.4.0 (Mar. 10, 2025)* : This is the version used for the preprint. 1. Fixed a numerical bug in calculating the joint probability of both networks, leading to a very sightly improved overall performance.
 
 *v0.3.1 (Nov. 29, 2024)* : Added `ssrs` model for PacBio Revio (`hifi_revio_ssrs`) and Illumina (`ilmn_ssrs`) platforms.
 
