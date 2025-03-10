@@ -45,17 +45,18 @@ data_preprocess_folder = [
     "create_tensor_pileup_calling",
     "sort_vcf",
     "postprocess_vcf",
-    'concat_files',
-    'add_back_missing_variants_in_genotyping',
+    "concat_files",
+    "add_back_missing_variants_in_genotyping",
     "nonsomatic_tagging",
-    'realign_reads',
-    'realign_variants',
-    'postfilter_variants',
+    "realign_reads",
+    "realign_variants",
+    "postfilter_variants",
     "haplotype_filtering",
-    'cal_af_distribution',
+    "cal_af_distribution",
     "compare_vcf",
     "select_hetero_snp_for_phasing",
-    'cna_germline_tagging',
+    "cna_germline_tagging",
+    "gen_contaminated_bam"
 ]
 
 
