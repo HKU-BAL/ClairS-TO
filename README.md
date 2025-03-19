@@ -24,6 +24,8 @@ Below is a somatic variant calling workflow of ClairS-TO.
 
 Like other tumor-only somatic variant callers, ClairS-TO also applies multiple post-calling filters, including 1) nine hard-filters, 2) four public plus any number of user-supplied panels of normals (PoNs), and 3) a module that statistically separates somatic and germline variants using estimated tumor purity and copy number profile.
 
+A preprint describing ClairS-TO's algorithms and results is at [bioRxiv](https://www.biorxiv.org/content/10.1101/2025.03.10.642523v1).
+
 For somatic variant calling using paired tumor/normal samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
 
 ------
