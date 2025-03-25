@@ -1366,7 +1366,7 @@ def somatic_calling(args):
         realign_command += ' --bam_fn ' + args.tumor_bam_fn
         realign_command += ' --ref_fn ' + args.ref_fn
         realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
-        realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_realignment.vcf'
         realign_command += ' --samtools ' + args.samtools
         realign_command += ' --python ' + args.python
         realign_command += ' --threads ' + str(args.threads)
@@ -1377,7 +1377,7 @@ def somatic_calling(args):
         postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
         postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
         postfilter_command += ' --ref_fn ' + args.ref_fn
-        postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_realignment.vcf'
         postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
         postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
         postfilter_command += ' --samtools ' + args.samtools
@@ -1604,7 +1604,7 @@ def somatic_calling(args):
             indel_realign_command += ' --bam_fn ' + args.tumor_bam_fn
             indel_realign_command += ' --ref_fn ' + args.ref_fn
             indel_realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
-            indel_realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_realignment.vcf'
             indel_realign_command += ' --samtools ' + args.samtools
             indel_realign_command += ' --python ' + args.python
             indel_realign_command += ' --threads ' + str(args.threads)
@@ -1616,7 +1616,7 @@ def somatic_calling(args):
             indel_postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
             indel_postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
             indel_postfilter_command += ' --ref_fn ' + args.ref_fn
-            indel_postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_realignment.vcf'
             indel_postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
             indel_postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
             indel_postfilter_command += ' --samtools ' + args.samtools
