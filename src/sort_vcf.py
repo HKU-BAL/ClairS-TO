@@ -138,7 +138,7 @@ def sort_vcf_from(args):
                                                                                               vcf_fn_prefix)))
             if compress_vcf:
                 compress_index_vcf(output_fn)
-            print_calling_step(output_fn=output_fn)
+            # print_calling_step(output_fn=output_fn)
             return
 
     if vcf_fn_suffix is not None:
@@ -148,8 +148,9 @@ def sort_vcf_from(args):
             print(log_warning(
                 "[WARNING] No vcf file found with suffix:{}/{}, output empty vcf file".format(input_dir,
                                                                                               vcf_fn_prefix)))
-            compress_index_vcf(output_fn)
-            print_calling_step(output_fn=output_fn)
+            if compress_vcf:
+                compress_index_vcf(output_fn)
+            # print_calling_step(output_fn=output_fn)
             return
 
     all_contigs_list = []
@@ -205,7 +206,7 @@ def sort_vcf_from(args):
         output_header(output_fn=output_fn, reference_file_path=ref_fn, sample_name=sample_name)
         if compress_vcf:
             compress_index_vcf(output_fn)
-        print_calling_step(output_fn=output_fn)
+        # print_calling_step(output_fn=output_fn)
         return
     if no_vcf_output:
         output_header(output_fn=output_fn, reference_file_path=ref_fn, sample_name=sample_name)
