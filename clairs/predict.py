@@ -510,10 +510,10 @@ def predict(args):
     test_pos = None
 
     if args.disable_indel_calling:
-        model_acgt = torch.load(chkpnt_fn_acgt, map_location=torch.device(device))
+        model_acgt = torch.load(chkpnt_fn_acgt, map_location=torch.device(device), weights_only=False)
         model_aff = model_acgt['model_acgt']
 
-        model_nacgt = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device))
+        model_nacgt = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device), weights_only=False)
         model_neg = model_nacgt['model_nacgt']
 
     else:
@@ -552,7 +552,7 @@ def predict(args):
                 model_type="acgt"
             )
 
-        model_acgt_saved = torch.load(chkpnt_fn_acgt, map_location=torch.device(device))
+        model_acgt_saved = torch.load(chkpnt_fn_acgt, map_location=torch.device(device), weights_only=False)
         model_aff_saved = model_acgt_saved['model_acgt']
         model_aff_state_dict = model_aff_saved.state_dict()
         model_aff.load_state_dict(model_aff_state_dict)
@@ -562,7 +562,7 @@ def predict(args):
                                  channel_size=param.pileup_channel_size,
                                  model_type="nacgt")
 
-        model_nacgt_saved = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device))
+        model_nacgt_saved = torch.load(chkpnt_fn_nacgt, map_location=torch.device(device), weights_only=False)
         model_neg_saved = model_nacgt_saved['model_nacgt']
         model_neg_state_dict = model_neg_saved.state_dict()
         model_neg.load_state_dict(model_neg_state_dict)
