@@ -540,7 +540,7 @@ def check_args(args):
                              'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ont_r10_dorado_4khz',
                              'ont_r10_dorado_5khz', 'ont_r10_guppy', 'ont_r10_guppy_4khz', 'ont_r10_guppy_5khz', 'ilmn', 'ilmn_ss', 'ilmn_ssrs',
                              'hifi_revio', 'hifi_revio_ss', 'hifi_revio_ssrs'}:
-        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ilmn', ilmn_ss', 'ilmn_ssrs', 'hifi_revio', 'hifi_revio_ss', and 'hifi_revio_ssrs' platform"))
+        sys.exit(log_error("[ERROR] Indel calling only support 'ont_r10_dorado_sup_4khz', 'ont_r10_dorado_hac_4khz', 'ont_r10_dorado_sup_5khz', 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', 'ont_r10_guppy_sup_4khz', 'ont_r10_guppy_hac_5khz', 'ilmn', 'ilmn_ss', 'ilmn_ssrs', 'hifi_revio', 'hifi_revio_ss', and 'hifi_revio_ssrs' platform"))
 
     if args.genotyping_mode_vcf_fn is not None and args.hybrid_mode_vcf_fn is not None:
         sys.exit(log_error("[ERROR] Please provide either --genotyping_mode_vcf_fn or --hybrid_mode_vcf_fn only"))
@@ -1778,7 +1778,7 @@ def somatic_parser():
         required=True,
         type=str,
         default=None,
-        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, 'ont_r10_dorado_sup_5khz_ss', 'ont_r10_dorado_sup_5khz_ssrs', ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}."
+        help="Select the sequencing platform of the input. Possible options: {ont_r10_dorado_sup_4khz, ont_r10_dorado_hac_4khz, ont_r10_dorado_sup_5khz, ont_r10_dorado_sup_5khz_ss, ont_r10_dorado_sup_5khz_ssrs, ont_r10_guppy_sup_4khz, ont_r10_guppy_hac_5khz, ilmn, ilmn_ss, ilmn_ssrs, hifi_revio, hifi_revio_ss, hifi_revio_ssrs}."
     )
 
     optional_params = parser.add_argument_group('Commonly used parameters')
