@@ -197,7 +197,7 @@ wget -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/api/micromamb
 mkdir micromamba
 tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 -C micromamba
 cd micromamba
-./bin/micromamba shell init -s bash -p .
+./bin/micromamba shell init -s bash -r .
 source ~/.bashrc
 ```
 
