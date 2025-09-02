@@ -57,7 +57,7 @@ RUN wget --quiet -O linux-64_micromamba-1.5.1-2.tar.bz2 https://micro.mamba.pm/a
     tar -xvjf linux-64_micromamba-1.5.1-2.tar.bz2 && \
     mkdir -p /opt/micromamba/bin && \
     mv ./bin/micromamba /opt/micromamba/bin/micromamba && \
-    /opt/micromamba/bin/micromamba shell init -s bash -p /opt/micromamba && \
+    /opt/micromamba/bin/micromamba shell init -s bash -r /opt/micromamba && \
     export MAMBA_ROOT_PREFIX=/opt/micromamba && \
     rm linux-64_micromamba-1.5.1-2.tar.bz2 && \
     rm -r info/ && \
