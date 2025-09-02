@@ -33,13 +33,13 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 ## Performance figures
 
 ### ONT Q20+ chemistry performance
-#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the Precision-Recall curves at 25-, 50-, and 75-fold tumor coverages of ONT COLO829 and HCC1395 datasets. 
+#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the Precision-Recall curves (a) and the best achievable F1-score, along with the corresponding precision and recall (b), at 25-, 50-, and 75-fold tumor coverages of ONT COLO829 dataset. 
 
-![](images/ONT_performance_AUPRC.png)
+![](images/ONT_performance_COLO829.png)
 
-#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the best achievable F1-score, along with the corresponding precision and recall, at 25-, 50-, and 75-fold tumor coverages of ONT COLO829 and HCC1395 datasets.
+#### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic of the Precision-Recall curves (a) and the best achievable F1-score, along with the corresponding precision and recall (b), at 25-, 50-, and 75-fold tumor coverages of ONT HCC1395 dataset.
 
-![](images/ONT_performance_F1.png)
+![](images/ONT_performance_HCC1395.png)
 
 ### PacBio Revio performance
 #### Performance comparison between ClairS-TO (SS and SSRS model), Clair3, and DeepSomatic at 50-fold tumor coverage of PacBio Revio COLO829 dataset. 
@@ -67,6 +67,8 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 ------
 
 ## Latest Updates
+
+*v0.4.1 (Sep. 2, 2025)* : 1. Fixed an alternative allele representation issue when a deletion is immediately followed by an insertion ([#38](https://github.com/HKU-BAL/ClairS-TO/issues/38)). 2. Fixed a VCF output issue when no variant was found ([#35](https://github.com/HKU-BAL/ClairS-TO/issues/35)). 3. Added checking when loading model to meet the latest pytorch version ([#37](https://github.com/HKU-BAL/ClairS-TO/issues/37)).
 
 *v0.4.0 (Mar. 10, 2025)* : This is the version used for the preprint. 1. Fixed a numerical bug in calculating the joint probability of both networks, leading to a very sightly improved overall performance.
 
