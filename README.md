@@ -4,7 +4,8 @@
 
 # ClairS-TO - a deep-learning method for long-read tumor-only somatic small variant calling
 
-[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17108224.svg)](https://doi.org/10.5281/zenodo.17108224)
+
 
 Contact: Ruibang Luo, Zhenxian Zheng, Lei Chen  
 Email: {rbluo,zxzheng,lchen}@cs.hku.hk 
