@@ -228,7 +228,7 @@ def main():
 
     # options for advanced users
     parser.add_argument('--qual', type=float, default=None,
-                        help="EXPERIMENTAL: If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 12, PacBio HiFi: 8, Illumina: 4")
+                        help="EXPERIMENTAL: If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 8, PacBio HiFi: 8, Illumina: 4")
 
     parser.add_argument('--qual_cutoff_phaseable_region', type=float, default=None,
                         help="EXPERIMENTAL: If set, variants called in phaseable regions with >QUAL will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`")
