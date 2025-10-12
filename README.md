@@ -328,7 +328,7 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Minimal Indel AF required for a variant to be called. Default: 0.1.
   --min_coverage INT
                         Minimal coverage required for a variant to be called. Default: 4.
-  -q INT, --qual INT    If set, variants with >INT will be tagged as PASS, or LowQual otherwise. Default: ONT - 12 , PacBio HiFi - 8, Illumina - 4.
+  -q INT, --qual INT    If set, variants with >INT will be tagged as PASS, or LowQual otherwise. Default: ONT - 8 , PacBio HiFi - 8, Illumina - 4.
   --qual_cutoff_phaseable_region INT
                         If set, variants called in phaseable regions with >INT will be tagged as PASS, or LowQual otherwise. Supersede by `--qual`.
   --qual_cutoff_unphaseable_region INT
