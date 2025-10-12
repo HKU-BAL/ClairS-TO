@@ -54,13 +54,13 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Contents
 - [Latest Updates](#latest-updates)
+- [Quick Demo](#quick-demo)
+- [Pre-trained Models](#pre-trained-models)
 - [Installation](#installation)
   - [Option 1. Docker pre-built image](#option-1--docker-pre-built-image)
   - [Option 2. Singularity](#option-2-singularity)
   - [Option 3. Build a micromamba (or anaconda) virtual environment](#option-3-build-a-micromamba-or-anaconda-virtual-environment)
   - [Option 4. Docker Dockerfile](#option-4-docker-dockerfile)
-- [Quick Demo](#quick-demo)
-- [Pre-trained Models](#pre-trained-models)
 - [Usage](#usage)
 - [Tagging non-somatic variant using panel of normals](#tagging-non-somatic-variant-using-panel-of-normals)
 - [Disclaimer](#disclaimer)
@@ -68,6 +68,8 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 ------
 
 ## Latest Updates
+
+*v0.4.2 (Oct. 13, 2025)* : 1. Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
 
 *v0.4.1 (Sep. 2, 2025)* : 1. Fixed an alternative allele representation issue when a deletion is immediately followed by an insertion ([#38](https://github.com/HKU-BAL/ClairS-TO/issues/38)). 2. Fixed a VCF output issue when no variant was found ([#35](https://github.com/HKU-BAL/ClairS-TO/issues/35)). 3. Added checking when loading model to meet the latest pytorch version ([#37](https://github.com/HKU-BAL/ClairS-TO/issues/37)).
 
@@ -131,7 +133,6 @@ ClairS-TO trained both Affirmative and Negational models using GIAB samples, and
 **Caveats <sup>1</sup>**: Starting from v0.3.0 version, ClairS-TO will provide two model types. `ssrs` is a model trained initially with synthetic samples and then real samples augmented (e.g., `ont_r10_dorado_sup_5khz_ssrs`, `ilmn_ssrs`, `hifi_revio_ssrs`), `ss` is a model trained from synthetic samples (e.g., `ont_r10_dorado_sup_5khz_ss`, `ilmn_ss`, `hifi_revio_ss`). The `ssrs` model provides better performance and fits most usage scenarios. `ss` model can be used when missing a cancer-type in model training is a concern. In v0.3.0, four real cancer cell-line datasets (HCC1937, HCC1954, H1437, and H2009) covering two cancer types (breast cancer, lung cancer) published by [Park et al.](https://www.biorxiv.org/content/10.1101/2024.08.16.608331v1) were used for `ssrs` model training.
 
 ------
-
 
 ## Installation
 
