@@ -1907,7 +1907,7 @@ def somatic_parser():
         "--qual",
         type=int,
         default=None,
-        help="If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 12, PacBio HiFi: 8, Illumina: 4."
+        help="If set, variants with >QUAL will be tagged as PASS, or LowQual otherwise. Default: ONT: 8, PacBio HiFi: 8, Illumina: 4."
     )
 
     optional_params.add_argument(
