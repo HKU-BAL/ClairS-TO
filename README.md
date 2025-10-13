@@ -69,7 +69,7 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
 
 ## Latest Updates
 
-*v0.4.2 (Oct. 13, 2025)* : 1. Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
+*v0.4.2 (Oct. 13, 2025)* : Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
 
 *v0.4.1 (Sep. 2, 2025)* : 1. Fixed an alternative allele representation issue when a deletion is immediately followed by an insertion ([#38](https://github.com/HKU-BAL/ClairS-TO/issues/38)). 2. Fixed a VCF output issue when no variant was found ([#35](https://github.com/HKU-BAL/ClairS-TO/issues/35)). 3. Added checking when loading model to meet the latest pytorch version ([#37](https://github.com/HKU-BAL/ClairS-TO/issues/37)).
 
