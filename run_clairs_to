@@ -1422,6 +1422,7 @@ def somatic_calling(args):
     postprocess_vcf_command += ' --qual ' + str(args.qual)
     postprocess_vcf_command += ' --qual_cutoff_phaseable_region ' + str(args.qual_cutoff_phaseable_region)
     postprocess_vcf_command += ' --qual_cutoff_unphaseable_region ' + str(args.qual_cutoff_unphaseable_region)
+    postprocess_vcf_command += ' --af ' + str(args.snv_min_af)
     postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
     postprocess_vcf_command += ' --disable_indel_calling True'
     postprocess_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
@@ -1663,6 +1664,7 @@ def somatic_calling(args):
         indel_postprocess_vcf_command += ' --qual ' + str(args.qual_indel)
         indel_postprocess_vcf_command += ' --qual_cutoff_phaseable_region ' + str(args.qual_indel_cutoff_phaseable_region)
         indel_postprocess_vcf_command += ' --qual_cutoff_unphaseable_region ' + str(args.qual_indel_cutoff_unphaseable_region)
+        indel_postprocess_vcf_command += ' --af ' + str(args.indel_min_af)
         indel_postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
         indel_postprocess_vcf_command += ' --disable_indel_calling False'
         indel_postprocess_vcf_command += ' --indel_calling '
