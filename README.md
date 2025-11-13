@@ -25,7 +25,7 @@ Below is a somatic variant calling workflow of ClairS-TO.
 
 Like other tumor-only somatic variant callers, ClairS-TO also applies multiple post-calling filters, including 1) nine hard-filters, 2) four public plus any number of user-supplied panels of normals (PoNs), and 3) a module that statistically separates somatic and germline variants using estimated tumor purity and copy number profile.
 
-A preprint describing ClairS-TO's algorithms and results is at [bioRxiv](https://www.biorxiv.org/content/10.1101/2025.03.10.642523v1).
+ClairS-TO is published at [Nature Communications](https://www.nature.com/articles/s41467-025-64547-z), and available as a preprint at [bioRxiv](https://www.biorxiv.org/content/10.1101/2025.03.10.642523v1).
 
 For somatic variant calling using paired tumor/normal samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
 
@@ -62,7 +62,8 @@ For somatic variant calling using paired tumor/normal samples, please try [Clair
   - [Option 3. Build a micromamba (or anaconda) virtual environment](#option-3-build-a-micromamba-or-anaconda-virtual-environment)
   - [Option 4. Docker Dockerfile](#option-4-docker-dockerfile)
 - [Usage](#usage)
-- [Tagging non-somatic variant using panel of normals](#tagging-non-somatic-variant-using-panel-of-normals)
+- [Tagging non-somatic variant using panel of normals](#tagging-non-somatic-variant-using-panels-of-normals-pons)
+- [How to cite](#how-to-cite)
 - [Disclaimer](#disclaimer)
 
 ------
@@ -436,6 +437,14 @@ In addition, we recommend using `--panel_of_normals_require_allele_matching` opt
 |    PoN 2     |              http://www.bio8.cs.hku.hk/clairs-to/databases/dbsnp.b138.non-somatic.sites.vcf.gz               |                       GATK dbSNP                       | https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf |  July 10, 2023 PM10∶42∶22   |   60,691,395    |   Non-Somatic sites    |         60,683,019         |     #CHROM  POS ID  REF ALT      |
 |    PoN 3     |                     http://www.bio8.cs.hku.hk/clairs-to/databases/1000g-pon.sites.vcf.gz                     |                     GATK 1000G PoN                     |              https://storage.googleapis.com/gatk-best-practices/somatic-hg38/1000g_pon.hg38.vcf.gz               |  July 10, 2023 PM10∶31∶32   |    2,609,566    |       All sites        |         2,609,566          |     #CHROM  POS ID  REF ALT      |
 |    PoN 4     | http://www.bio8.cs.hku.hk/clairs-to/databases/CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.af-ge-0.001.vcf.gz  | Consortium of Long Read Sequencing Database (CoLoRSdb) |           https://zenodo.org/records/13145123/files/CoLoRSdb.GRCh38.v1.1.0.deepvariant.glnexus.vcf.gz            | August 21, 2024 PM10∶36∶10  |   49,550,902    | Sites with AF ≥ 0.001  |         41,175,834         |     #CHROM  POS ID  REF ALT      |
+
+------
+
+## How to cite
+
+If you're using ClairS-TO in your work, please cite:
+
+[Chen, L., Zheng, Z., Su, J. et al. ClairS-TO: a deep-learning method for long-read tumor-only somatic small variant calling. Nat Commun 16, 9630 (2025). https://doi.org/10.1038/s41467-025-64547-z](https://www.nature.com/articles/s41467-025-64547-z)
 
 ------
 
