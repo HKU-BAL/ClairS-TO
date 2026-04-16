@@ -27,7 +27,13 @@ Like other tumor-only somatic variant callers, ClairS-TO also applies multiple p
 
 ClairS-TO is published at [Nature Communications](https://www.nature.com/articles/s41467-025-64547-z), and available as a preprint at [bioRxiv](https://www.biorxiv.org/content/10.1101/2025.03.10.642523v1).
 
-For somatic variant calling using paired tumor/normal samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
+For somatic variant calling using **paired tumor/normal** samples, please try [ClairS](https://github.com/HKU-BAL/ClairS).
+
+For germline variant calling using **DNA-seq** sample, please try [Clair3](https://github.com/HKU-BAL/Clair3). 
+
+For germline variant calling using **long-read RNA-seq** sample, please try [Clair3-RNA](https://github.com/HKU-BAL/Clair3-RNA).
+
+If you need agentic AI skill (Claude Code, Cursor, Codex…) for the ClairS-TO, please try [Clair-skills](https://github.com/HKU-BAL/Clair-skills).
 
 ------
 
