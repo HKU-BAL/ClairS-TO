@@ -76,7 +76,7 @@ If you need agentic AI skill (Claude Code, Cursor, Codex…) for the ClairS-TO, 
 
 ## Latest Updates
 
-*v0.4.3 (Apr. 23, 2026)* : Optimized non-somatic tagging module by implementing stream-based PoN loading to significantly reduce memory usage and prevent OOM errors with new safety checks ([#47](https://github.com/HKU-BAL/ClairS-TO/issues/47) and [#54](https://github.com/HKU-BAL/ClairS-TO/issues/54)).
+*v0.4.3 (Apr. 23, 2026)* : Optimized non-somatic tagging module by implementing stream-based PoN processing to significantly reduce memory usage and prevent OOM errors with new safety checks ([#47](https://github.com/HKU-BAL/ClairS-TO/issues/47) and [#54](https://github.com/HKU-BAL/ClairS-TO/issues/54)).
 
 *v0.4.2 (Oct. 13, 2025)* : Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
 
