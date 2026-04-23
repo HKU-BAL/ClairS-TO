@@ -76,6 +76,8 @@ If you need agentic AI skill (Claude Code, Cursor, Codex…) for the ClairS-TO, 
 
 ## Latest Updates
 
+*v0.4.3 (Apr. 23, 2026)* : Optimized non-somatic tagging module by implementing stream-based PoN loading to significantly reduce memory usage and prevent OOM errors with new safety checks ([#47](https://github.com/HKU-BAL/ClairS-TO/issues/47) and [#54](https://github.com/HKU-BAL/ClairS-TO/issues/54)).
+
 *v0.4.2 (Oct. 13, 2025)* : Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
 
 *v0.4.1 (Sep. 2, 2025)* : 1. Fixed an alternative allele representation issue when a deletion is immediately followed by an insertion ([#38](https://github.com/HKU-BAL/ClairS-TO/issues/38)). 2. Fixed a VCF output issue when no variant was found ([#35](https://github.com/HKU-BAL/ClairS-TO/issues/35)). 3. Added checking when loading model to meet the latest pytorch version ([#37](https://github.com/HKU-BAL/ClairS-TO/issues/37)).
