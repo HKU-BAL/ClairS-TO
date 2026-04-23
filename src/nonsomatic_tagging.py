@@ -1,11 +1,13 @@
 import os
+import sys
 import shlex
 import hashlib
+import subprocess
 
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
-from shared.vcf import VcfReader, VcfWriter, Position
+from shared.vcf import VcfReader
 from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
 
 major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
@@ -30,53 +32,150 @@ def insert_after_line(original_str, target_line, insert_str):
     return '\n'.join(lines)
 
 
-class VcfReader_Database(object):
-    def __init__(self, vcf_fn,
-                 ctg_name=None,
-                 direct_open=False,
-                 keep_row_str=False,
-                 save_header=False):
-        self.vcf_fn = vcf_fn
-        self.ctg_name = ctg_name
-        self.variant_dict = defaultdict(Position)
-        self.direct_open = direct_open
-        self.keep_row_str = keep_row_str
-        self.header = ""
-        self.save_header = save_header
+def _pon_has_tabix_index(pon_vcf_fn):
+    """Check if PoN file has tabix index for region-based streaming."""
+    tbi = pon_vcf_fn + '.tbi' if pon_vcf_fn.endswith('.gz') else pon_vcf_fn + '.tbi'
+    return os.path.exists(tbi)
 
-    def read_vcf(self):
-        if self.vcf_fn is None or not os.path.exists(self.vcf_fn):
-            return
 
-        if self.direct_open:
-            vcf_fp = open(self.vcf_fn)
-            vcf_fo = vcf_fp
+def _build_input_ids_by_contig_pos(input_variant_dict_id_set_contig):
+    """Input-side index: contig -> position str -> set of full variant id strings (non-allele PoN)."""
+    m = defaultdict(lambda: defaultdict(set))
+    for contig, ids in input_variant_dict_id_set_contig.items():
+        for id_str in ids:
+            pos_str = id_str.split('\t')[0]
+            m[contig][pos_str].add(id_str)
+    return m
+
+
+def _parse_pon_line(line, restrict_chroms):
+    if line.startswith('#'):
+        return None
+    columns = line.strip().split('\t')
+    if len(columns) < 5:
+        return None
+    chromosome, position, reference, alternate = columns[0], columns[1], columns[3], columns[4]
+    if restrict_chroms is not None and chromosome not in restrict_chroms:
+        return None
+    return chromosome, int(position), reference, alternate
+
+
+def _iter_pon_vcf_records_gzip(pon_vcf_fn, ctg_name, input_keys_list):
+    """Full-file (or uncompressed) PoN stream with same contig filtering as the former full-file PoN load."""
+    restrict = frozenset(input_keys_list) if ctg_name is None else None
+    if pon_vcf_fn.endswith('.vcf'):
+        vcf_fp = open(pon_vcf_fn)
+        vcf_fo = vcf_fp
+        is_subprocess = False
+    else:
+        vcf_fp = subprocess_popen(shlex.split("gzip -fdc %s" % (pon_vcf_fn)))
+        vcf_fo = vcf_fp.stdout
+        is_subprocess = True
+    try:
+        for line in vcf_fo:
+            rec = _parse_pon_line(line, restrict)
+            if rec is None:
+                continue
+            if ctg_name is not None and rec[0] != ctg_name:
+                continue
+            yield rec
+    finally:
+        if is_subprocess:
+            vcf_fp.stdout.close()
+            vcf_fp.wait()
+
+
+def _apply_pon_streaming(
+        pon_vcf_fn,
+        ctg_name,
+        input_keys_list,
+        require_allele,
+        input_variant_dict_set_contig,
+        input_variant_dict_id_set_contig,
+        input_ids_by_contig_pos,
+        nonsomatic_filter_variant_dict_id_set_contig):
+    """
+    Stream PoN once; update nonsomatic_filter and build per-PoN intersection sets.
+    Semantics match bulk set intersection / difference on full PoN sets.
+    Returns (input_inter_pon_variant_dict_id_set_contig, used_successful_tabix_single_contig).
+    """
+    input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
+
+    def apply_one(chromosome, position, reference, alternate):
+        alts = alternate.split(',') if ',' in alternate else [alternate]
+        if require_allele:
+            for alt in alts:
+                key = str(position) + '\t' + reference + '\t' + alt
+                contig = chromosome if ctg_name is None else ctg_name
+                if key in input_variant_dict_id_set_contig[contig]:
+                    input_inter_pon_variant_dict_id_set_contig[contig].add(key)
+                    nonsomatic_filter_variant_dict_id_set_contig[contig].discard(key)
         else:
-            vcf_fp = subprocess_popen(shlex.split("gzip -fdc %s" % (self.vcf_fn)))
-            vcf_fo = vcf_fp.stdout
-        for row in vcf_fo:
-            columns = row.strip().split()
-            if columns[0][0] == "#":
-                if self.save_header:
-                    self.header += row
-                continue
-            chromosome, position = columns[0], columns[1]
-            if self.ctg_name is not None and chromosome != self.ctg_name:
-                continue
-            reference, alternate = columns[3], columns[4]
-            position = int(position)
-            row_str = row if self.keep_row_str else False
-            key = (chromosome, position, reference, alternate) if self.ctg_name is None else (position, reference, alternate)
+            pos_str = str(position)
+            contig = chromosome if ctg_name is None else ctg_name
+            if pos_str not in input_variant_dict_set_contig[contig]:
+                return
+            input_inter_pon_variant_dict_id_set_contig[contig].add(pos_str)
+            for id_str in input_ids_by_contig_pos[contig][pos_str]:
+                nonsomatic_filter_variant_dict_id_set_contig[contig].discard(id_str)
 
-            self.variant_dict[key] = Position(ctg_name=chromosome,
-                                              pos=position,
-                                              ref_base=reference,
-                                              alt_base=alternate,
-                                              row_str=row_str
-                                              )
+    contigs_to_fetch = [ctg_name] if ctg_name is not None else list(input_keys_list)
+    use_tabix = str(pon_vcf_fn).endswith('.gz') and _pon_has_tabix_index(str(pon_vcf_fn))
+    snapshot_filter = {k: set(v) for k, v in nonsomatic_filter_variant_dict_id_set_contig.items()}
+    used_tabix_ok = False
+
+    def run_gzip_stream():
+        for rec in _iter_pon_vcf_records_gzip(str(pon_vcf_fn), ctg_name, input_keys_list):
+            apply_one(*rec)
+
+    if use_tabix and len(contigs_to_fetch) == 1 and len(input_keys_list) > 0:
+        contig = contigs_to_fetch[0]
+        try:
+            proc = subprocess.Popen(
+                ['tabix', '-f', str(pon_vcf_fn), contig],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        except (FileNotFoundError, OSError) as e:
+            print("[WARNING] tabix not available or failed for {}: {}. Falling back to full-file stream.".format(
+                pon_vcf_fn, str(e)), file=sys.stderr)
+            run_gzip_stream()
+        else:
+            for line in proc.stdout:
+                rec = _parse_pon_line(line, None)
+                if rec is not None:
+                    apply_one(*rec)
+            proc.wait()
+            stderr_out = proc.stderr.read() if proc.stderr else ''
+            if proc.returncode != 0 and stderr_out and 'not a valid contig' not in stderr_out.lower():
+                print("[WARNING] tabix failed for {} {}: {}. Falling back to full-file stream.".format(
+                    pon_vcf_fn, contig, stderr_out[:200]), file=sys.stderr)
+                for k in snapshot_filter:
+                    nonsomatic_filter_variant_dict_id_set_contig[k] = set(snapshot_filter[k])
+                input_inter_pon_variant_dict_id_set_contig.clear()
+                run_gzip_stream()
+            else:
+                used_tabix_ok = True
+    else:
+        run_gzip_stream()
+
+    return input_inter_pon_variant_dict_id_set_contig, used_tabix_ok
 
 
 def nonsomatic_tag(args):
+    try:
+        _nonsomatic_tag_impl(args)
+    except MemoryError:
+        print("\n[ERROR] Out of memory (OOM) during non-somatic tagging. PoN files may be too large for available RAM.", file=sys.stderr)
+        print("[ERROR] Consider: 1) Using fewer/smaller PoN files; 2) Increasing system memory; 3) Ensure PoN files have .tbi index for lower-RAM tabix mode.", file=sys.stderr)
+        sys.exit(1)
+    except OSError as e:
+        if 'Cannot allocate memory' in str(e) or 'errno 12' in str(e):
+            print("\n[ERROR] Out of memory (OOM) during non-somatic tagging: {}".format(e), file=sys.stderr)
+            print("[ERROR] Consider: 1) Using fewer/smaller PoN files; 2) Increasing system memory; 3) Ensure PoN files have .tbi index.", file=sys.stderr)
+            sys.exit(1)
+        raise
+
+
+def _nonsomatic_tag_impl(args):
     nonsomatic_tag_vcf_header_info = ''
     ctg_name = args.ctg_name
     disable_print_nonsomatic_calls = args.disable_print_nonsomatic_calls
@@ -134,7 +233,9 @@ def nonsomatic_tag(args):
                     input_variant_dict_set_contig[ctg_name].add(str(k))
                     input_variant_dict_id_set_contig[ctg_name].add(str(k) + '\t' + v.reference_bases + '\t' + v.alternate_bases[0])
 
-    nonsomatic_filter_variant_dict_id_set_contig = input_variant_dict_id_set_contig.copy()
+    nonsomatic_filter_variant_dict_id_set_contig = {
+        k: set(v) for k, v in input_variant_dict_id_set_contig.items()
+    }
 
     total_input = 0
     for k, v in input_variant_dict_id_set_contig.items():
@@ -145,46 +246,27 @@ def nonsomatic_tag(args):
 
     input_keys_list = list(input_variant_dict_id_set_contig.keys())
 
+    input_ids_by_contig_pos = _build_input_ids_by_contig_pos(input_variant_dict_id_set_contig)
+
     input_inter_pon_variant_dict_id_set_contig_list = []
     pon_vcf_header_info_list = []
     if len(pon_vcf_fn_list) > 0:
         for index, pon_vcf_fn in enumerate(pon_vcf_fn_list):
-            input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
-            pon_vcf_reader = VcfReader_Database(vcf_fn=str(pon_vcf_fn),
-                                                  ctg_name=ctg_name,
-                                                  keep_row_str=False,
-                                                  save_header=True)
-            pon_vcf_reader.read_vcf()
-            pon_input_variant_dict = pon_vcf_reader.variant_dict
+            require_allele = str2bool(pon_require_allele_matching_list[index])
 
-            pon_variant_dict_id_set_contig = defaultdict(set)
+            input_inter_pon_variant_dict_id_set_contig, used_tabix_ok = _apply_pon_streaming(
+                str(pon_vcf_fn),
+                ctg_name,
+                input_keys_list,
+                require_allele,
+                input_variant_dict_set_contig,
+                input_variant_dict_id_set_contig,
+                input_ids_by_contig_pos,
+                nonsomatic_filter_variant_dict_id_set_contig,
+            )
 
-            for k, v in pon_input_variant_dict.items():
-                if ctg_name is None:
-                    if k[0] not in input_keys_list:
-                        continue
-                    if str2bool(pon_require_allele_matching_list[index]):
-                        for i in range(len(v.alternate_bases)):
-                            pon_variant_dict_id_set_contig[k[0]].add(str(k[1]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[i])
-                    else:
-                        pon_variant_dict_id_set_contig[k[0]].add(str(k[1]))
-                else:
-                    if str2bool(pon_require_allele_matching_list[index]):
-                        for i in range(len(v.alternate_bases)):
-                            pon_variant_dict_id_set_contig[ctg_name].add(str(k[0]) + '\t' + v.reference_bases + '\t' + v.alternate_bases[i])
-                    else:
-                        pon_variant_dict_id_set_contig[ctg_name].add(str(k[0]))
-
-            for k, v in nonsomatic_filter_variant_dict_id_set_contig.items():
-                if str2bool(pon_require_allele_matching_list[index]):
-                    nonsomatic_filter_variant_dict_id_set_contig[k] = nonsomatic_filter_variant_dict_id_set_contig[k] - \
-                                                                      pon_variant_dict_id_set_contig[k]
-                    input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_id_set_contig[k].intersection(
-                        pon_variant_dict_id_set_contig[k])
-                else:
-                    nonsomatic_filter_variant_dict_id_set_contig[k] = {id for id in nonsomatic_filter_variant_dict_id_set_contig[k] if id.split('\t')[0] not in pon_variant_dict_id_set_contig[k]}
-                    input_inter_pon_variant_dict_id_set_contig[k] = input_variant_dict_set_contig[k].intersection(
-                        pon_variant_dict_id_set_contig[k])
+            if used_tabix_ok:
+                print("[INFO] PoN {} loaded by tabix (contig-specific, lower RAM)".format(os.path.basename(pon_vcf_fn)))
 
             input_inter_pon_variant_dict_id_set_contig_list.append(
                 input_inter_pon_variant_dict_id_set_contig)
