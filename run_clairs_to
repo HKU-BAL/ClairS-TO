@@ -31,6 +31,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+
+os.environ["USE_NNPACK"] = "0"
+if os.environ.get("TORCH_CPP_LOG_LEVEL") is None:
+    os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
+
+import re
 import sys
 import argparse
 import shlex
@@ -485,6 +491,24 @@ def check_contigs_intersection(args, fai_fn):
             args.disable_verdict = True
             logging(log_warning(
                 "[WARNING] Verdict currently only works for GRCh38 reference genome, apply the --disable_verdict option!"))
+        elif args.cna_resource_dir is not None:
+            # Fail before alleleCounter: require G1000 loci per called autosome/X (same names as cna_germline_tagging).
+            loci_dir = os.path.join(args.cna_resource_dir, 'loci_files')
+            missing_loci = []
+            for ctg in sorted_contig_list:
+                if ctg not in contigs_order:
+                    continue
+                loci_fn = os.path.join(loci_dir, 'G1000_loci_hg38_{}.txt'.format(ctg))
+                if not os.path.isfile(loci_fn):
+                    missing_loci.append(loci_fn)
+            if missing_loci:
+                args.disable_verdict = True
+                logging(log_warning(
+                    "[WARNING] CNA Verdict loci file(s) missing under {} (e.g. {}). "
+                    "Install reference_files.tar.gz under $CONDA_PREFIX/bin/clairs-to_cna_data/, "
+                    "or pass a complete path via --conda_prefix / --cna_resource_dir, "
+                    "or use --disable_verdict. Disabling Verdict for this run.".format(
+                        loci_dir, os.path.basename(missing_loci[0]))))
 
     chunk_list = []
     chunk_list_path = os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
@@ -918,11 +942,13 @@ def check_args(args):
             args.cna_resource_dir = os.path.join(args.conda_prefix, 'bin', 'clairs-to_cna_data', 'reference_files')
         if args.allele_counter_dir is None:
             args.allele_counter_dir = os.path.join(file_directory, 'src', 'verdict', 'allele_counter')
-        if not os.path.exists(args.allele_counter_dir):
+        allele_counter_bin = os.path.join(args.allele_counter_dir, 'bin', 'alleleCounter')
+        if not os.path.isfile(allele_counter_bin):
             args.disable_verdict = True
             logging(log_warning(
-                "[WARNING] The allele counter {} is not found, apply the --disable_verdict option!".format(
-                    args.allele_counter_dir)))
+                "[WARNING] alleleCounter executable not found at {} (build with src/verdict/allele_counter/setup.sh "
+                "or set --allele_counter_dir to an install that contains bin/alleleCounter). "
+                "Disabling Verdict (--disable_verdict).".format(allele_counter_bin)))
         if not os.path.exists(args.cna_resource_dir):
             args.disable_verdict = True
             logging(log_warning(
@@ -1704,34 +1730,70 @@ def somatic_calling(args):
             indel_cna_germline_tagging_command += ' 2>&1 | tee ' + args.output_dir + '/logs/10_CGT_INDEL.log'
             commands_list += [indel_cna_germline_tagging_command]
 
-    def run_command_with_parallel_check(command, step_num, stdout=None):
+    def run_command_with_parallel_check(command, step_num, step_desc="", stdout=None):
+        # Use bash with pipefail so that failures in pipelines (e.g. cmd | tee) propagate correctly
+        use_pipefail = "| tee" in command or "|" in command
+        run_cmd = ["bash", "-o", "pipefail", "-c", command] if use_pipefail else command
+        step_label = "STEP {} ({})".format(step_num, step_desc) if step_desc else "STEP {}".format(step_num)
+        shell = not use_pipefail
         try:
-            if "parallel" in command.lower():
-                result = subprocess.run(command, shell=True, check=False, stdout=stdout)
-                if result.returncode != 0:
-                    sys.stderr.write(f"ERROR in STEP {step_num}, PARALLEL COMMAND FAILED WITH CODE {result.returncode}: {command}\n")
-                    sys.exit(1)
-                return result.returncode
-            else:
-                return subprocess.check_call(command, shell=True, stdout=stdout)
-        except subprocess.CalledProcessError as e:
-            sys.stderr.write(f"ERROR in STEP {step_num}, COMMAND FAILED: {command}\n")
+            result = subprocess.run(run_cmd, shell=shell, check=False, stdout=stdout)
+        except OSError as e:
+            sys.stderr.write(
+                "[ERROR] {} FAILED to start subprocess ({}): {}\nCommand: {}\n".format(
+                    step_label, e.__class__.__name__, e, command[:200] + ("..." if len(command) > 200 else "")
+                )
+            )
             sys.exit(1)
+        rc = result.returncode
+        if rc != 0:
+            cmd_snip = command[:200] + ("..." if len(command) > 200 else "")
+            # 128+SIGKILL / 128+SIGABRT when a shell reports signaled children; negative rc = -signal (POSIX direct child)
+            # Strong heuristic only; many OOMs still exit with 1 — check step logs.
+            oom_like = rc in (137, 134, -9, -6)
+            extra = (
+                "\n[ERROR] This exit code often indicates SIGKILL or SIGABRT (e.g. Linux OOM killer or abort). "
+                "Consider increasing RAM, a narrower --region, or --ctg_name for per-contig runs.\n"
+                if oom_like
+                else ""
+            )
+            sys.stderr.write(
+                "[ERROR] {} FAILED (exit code {}): {}\n{}\n".format(step_label, rc, cmd_snip, extra)
+            )
+            sys.exit(1)
+        return rc
 
     # EXECUTE COMMANDS STEP BY STEP
+    # Build step_numbers: match echo's "STEP N" so error messages show correct step
+    step_numbers = []
+    last_step = 1
+    for echo in echo_list:
+        m = re.search(r'STEP (\d+)', echo)
+        if m:
+            last_step = int(m.group(1))
+        step_numbers.append(last_step)
+
+    def step_desc_from_echo(echo):
+        # Extract description after "STEP N: " e.g. "Non-somatic Tagging for SNV Variants"
+        m = re.search(r'STEP \d+:\s*(.+?)(?:\n|$)', echo)
+        return m.group(1).strip() if m else ""
+
     skip_steps = args.skip_steps.rstrip().split(',') if args.skip_steps else None
     stdout = sys.stdout if args.tee is None else args.tee.stdin
     for i, (command, echo) in enumerate(zip(commands_list, echo_list)):
+        step_num = step_numbers[i] if i < len(step_numbers) else (i + 1)
+        step_desc = step_desc_from_echo(echo)
         logging(echo)
         logging("[INFO] RUN THE FOLLOWING COMMAND:")
         logging(command)
         logging("")
         if not args.dry_run:
-            if skip_steps is not None and str(i + 1) in skip_steps:
-                logging("[INFO] --skip_steps is enabled, skip running step {}.".format(i + 1))
+            cmd_index = i + 1
+            if skip_steps is not None and str(cmd_index) in skip_steps:
+                logging("[INFO] --skip_steps is enabled, skip running command {} (STEP {}).".format(cmd_index, step_num))
                 logging("")
                 continue
-            return_code = run_command_with_parallel_check(command, i + 1, stdout=stdout)
+            return_code = run_command_with_parallel_check(command, step_num, step_desc=step_desc, stdout=stdout)
         logging("")
 
     if args.remove_intermediate_dir:
@@ -2287,30 +2349,47 @@ def main():
         subprocess.run("mv {} {}".format(tee_logger, tee_logger + '.bak'), shell=True)
     try:
         args.tee = subprocess.Popen(['tee', tee_logger], stdin=subprocess.PIPE, bufsize=0)
-    except:
+    except Exception:
         logging(log_warning("[WARNING] `tee` not found, disable `tee` logging!"))
         args.tee = None
 
     logging("")
 
-    args = print_command_line(args)
-    args = check_args(args)
-    args = print_args(args)
-    somatic_calling(args)
+    try:
+        args = print_command_line(args)
+        args = check_args(args)
+        args = print_args(args)
+        somatic_calling(args)
 
-    runtime = time() - call_start_time
-    logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime / 60), int(runtime % 60)))
-    if not args.disable_indel_calling:
-        logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
-                                                                                    args.snv_output_prefix))
-        logging("[INFO] Finish calling, Indel output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
-                                                                                      args.indel_output_prefix))
-    else:
-        logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
-                                                                                    args.snv_output_prefix))
+        runtime = time() - call_start_time
+        logging("[INFO] Total time elapsed: %im%.2fs\n" % (int(runtime / 60), int(runtime % 60)))
+        if not args.disable_indel_calling:
+            logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
+                                                                                        args.snv_output_prefix))
+            logging("[INFO] Finish calling, Indel output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
+                                                                                          args.indel_output_prefix))
+        else:
+            logging("[INFO] Finish calling, SNV output VCF file: {}/{}.vcf.gz\n".format(args.output_dir,
+                                                                                        args.snv_output_prefix))
 
-    if args.tee is not None:
-        args.tee.stdin.close()
+    except MemoryError:
+        sys.stderr.write("\n[ERROR] Out of memory (OOM). Program terminated.\n")
+        sys.stderr.write("[ERROR] Consider: increasing RAM, using --ctg_name for per-contig runs, or --disable_nonsomatic_tagging.\n")
+        sys.exit(1)
+    except OSError as e:
+        if 'Cannot allocate memory' in str(e) or 'errno 12' in str(e):
+            sys.stderr.write("\n[ERROR] Out of memory (OOM): {}\n".format(e))
+            sys.stderr.write("[ERROR] Consider: increasing RAM, using --ctg_name for per-contig runs.\n")
+            sys.exit(1)
+        raise
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        sys.stderr.write("\n[ERROR] ClairS-TO failed: {}\n".format(e))
+        sys.exit(1)
+    finally:
+        if args.tee is not None:
+            args.tee.stdin.close()
 
 
 if __name__ == '__main__':
