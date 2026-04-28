@@ -357,7 +357,7 @@ def output_vcf_from_probability(
                         is_variant = False
                         is_reference = True
         elif best_match_alt[0] == 'I':
-            alternate_base = best_match_alt[1:] if best_match_alt[1] != '#' else best_match_alt[2:]
+            alternate_base = best_match_alt[1:] if best_match_alt[1] != '#' else reference_base + best_match_alt[2:]
             is_INS = True
         elif best_match_alt[0] == 'D':
             alternate_base = reference_base
