@@ -31,11 +31,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-
-os.environ["USE_NNPACK"] = "0"
-if os.environ.get("TORCH_CPP_LOG_LEVEL") is None:
-    os.environ["TORCH_CPP_LOG_LEVEL"] = "ERROR"
-
 import re
 import sys
 import argparse
