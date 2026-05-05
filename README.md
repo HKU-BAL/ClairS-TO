@@ -76,6 +76,8 @@ If you need agentic AI skill (Claude Code, Cursor, Codex…) for the ClairS-TO, 
 
 ## Latest Updates
 
+*v0.4.4 (May 5, 2026)* : 1. Further optimized the non-somatic tagging module with stream processing to prevent OOM errors when users provide an ultra-large PoN ([#54](https://github.com/HKU-BAL/ClairS-TO/issues/54#issuecomment-4345617140)). 2. Added a chunk-processing option to the haplotype filtering module (enabled via `--haplotype_filtering_chunk_mode True`), which is recommended for efficiently handling over a million candidates ([#54](https://github.com/HKU-BAL/ClairS-TO/issues/54#issuecomment-4345617140)). 3. Fixed a bug where the haplotype filtering process could not be properly disabled even when the `--disable_intermediate_phasing` flag was specified ([#57](https://github.com/HKU-BAL/ClairS-TO/issues/57)). 4. Optimized the pipeline to ensure that temporary directories and output files are distinctly named and isolated when a user provides a specific sample name ([#43](https://github.com/HKU-BAL/ClairS-TO/issues/43#issuecomment-3673489529)).
+
 *v0.4.3 (Apr. 23, 2026)* : Optimized non-somatic tagging module by implementing stream-based PoN processing to significantly reduce memory usage and prevent OOM errors with new safety checks ([#47](https://github.com/HKU-BAL/ClairS-TO/issues/47) and [#54](https://github.com/HKU-BAL/ClairS-TO/issues/54)).
 
 *v0.4.2 (Oct. 13, 2025)* : Added safe checking when ClairS-TO got any non-zero returns ([#40](https://github.com/HKU-BAL/ClairS-TO/issues/40)).
