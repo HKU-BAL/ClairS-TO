@@ -1,14 +1,15 @@
 import os
 import sys
-import shlex
+import io
 import hashlib
 import subprocess
+import threading
 
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
 from shared.vcf import VcfReader
-from shared.utils import str2bool, str_none, reference_sequence_from, subprocess_popen
+from shared.utils import str2bool, str_none, reference_sequence_from
 
 major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] + [str(a) for a in
                                                                                    list(range(1, 23)) + ["X", "Y"]]
@@ -32,14 +33,26 @@ def insert_after_line(original_str, target_line, insert_str):
     return '\n'.join(lines)
 
 
+def _tagging_summary_line(ctg_name, total_input, tagged_union, remain_pass, pon_fns, pon_hit_totals):
+    parts = [
+        'ctg={}'.format(ctg_name if ctg_name is not None else '.'),
+        'total_input_pass_calls={}'.format(total_input),
+        'tagged_non_somatic_union={}'.format(tagged_union),
+        'remain_pass_calls={}'.format(remain_pass),
+        'num_pon_files={}'.format(len(pon_fns)),
+    ]
+    for i, (fn, nh) in enumerate(zip(pon_fns, pon_hit_totals), start=1):
+        parts.append('PoN{}_hits={}'.format(i, nh))
+        parts.append('PoN{}_file={}'.format(i, os.path.basename(str(fn))))
+    return ';'.join(parts)
+
+
 def _pon_has_tabix_index(pon_vcf_fn):
-    """Check if PoN file has tabix index for region-based streaming."""
     tbi = pon_vcf_fn + '.tbi' if pon_vcf_fn.endswith('.gz') else pon_vcf_fn + '.tbi'
     return os.path.exists(tbi)
 
 
 def _build_input_ids_by_contig_pos(input_variant_dict_id_set_contig):
-    """Input-side index: contig -> position str -> set of full variant id strings (non-allele PoN)."""
     m = defaultdict(lambda: defaultdict(set))
     for contig, ids in input_variant_dict_id_set_contig.items():
         for id_str in ids:
@@ -51,38 +64,87 @@ def _build_input_ids_by_contig_pos(input_variant_dict_id_set_contig):
 def _parse_pon_line(line, restrict_chroms):
     if line.startswith('#'):
         return None
-    columns = line.strip().split('\t')
-    if len(columns) < 5:
+    line = line.strip()
+    if not line:
         return None
-    chromosome, position, reference, alternate = columns[0], columns[1], columns[3], columns[4]
+    parts = line.split('\t', 5)
+    if len(parts) < 5:
+        return None
+    chromosome, position, reference, alternate = parts[0], parts[1], parts[3], parts[4]
     if restrict_chroms is not None and chromosome not in restrict_chroms:
         return None
     return chromosome, int(position), reference, alternate
 
 
-def _iter_pon_vcf_records_gzip(pon_vcf_fn, ctg_name, input_keys_list):
-    """Full-file (or uncompressed) PoN stream with same contig filtering as the former full-file PoN load."""
+def _feed_raw_file_to_gzip_stdin(proc, pon_vcf_fn, md5_hash):
+    try:
+        with open(pon_vcf_fn, 'rb') as f:
+            for chunk in iter(lambda: f.read(262144), b''):
+                if md5_hash is not None:
+                    md5_hash.update(chunk)
+                proc.stdin.write(chunk)
+    except BrokenPipeError:
+        pass
+    finally:
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+
+
+def _iter_pon_vcf_records_stream(pon_vcf_fn, ctg_name, input_keys_list, md5_hash=None):
     restrict = frozenset(input_keys_list) if ctg_name is None else None
     if pon_vcf_fn.endswith('.vcf'):
-        vcf_fp = open(pon_vcf_fn)
-        vcf_fo = vcf_fp
-        is_subprocess = False
-    else:
-        vcf_fp = subprocess_popen(shlex.split("gzip -fdc %s" % (pon_vcf_fn)))
-        vcf_fo = vcf_fp.stdout
-        is_subprocess = True
-    try:
-        for line in vcf_fo:
+        buf = b''
+        with open(pon_vcf_fn, 'rb') as f:
+            for chunk in iter(lambda: f.read(262144), b''):
+                if md5_hash is not None:
+                    md5_hash.update(chunk)
+                buf += chunk
+                while b'\n' in buf:
+                    raw, buf = buf.split(b'\n', 1)
+                    line = raw.decode('utf-8', errors='replace')
+                    rec = _parse_pon_line(line, restrict)
+                    if rec is None:
+                        continue
+                    if ctg_name is not None and rec[0] != ctg_name:
+                        continue
+                    yield rec
+        if buf:
+            line = buf.decode('utf-8', errors='replace')
             rec = _parse_pon_line(line, restrict)
-            if rec is None:
-                continue
-            if ctg_name is not None and rec[0] != ctg_name:
-                continue
-            yield rec
+            if rec is not None and (ctg_name is None or rec[0] == ctg_name):
+                yield rec
+        return
+
+    proc = subprocess.Popen(
+        ['gzip', '-dc'],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    feeder = threading.Thread(
+        target=_feed_raw_file_to_gzip_stdin,
+        args=(proc, pon_vcf_fn, md5_hash),
+        daemon=True,
+    )
+    feeder.start()
+    try:
+        text_out = io.TextIOWrapper(
+            proc.stdout, encoding='utf-8', errors='replace', newline='')
+        try:
+            for line in text_out:
+                rec = _parse_pon_line(line, restrict)
+                if rec is None:
+                    continue
+                if ctg_name is not None and rec[0] != ctg_name:
+                    continue
+                yield rec
+        finally:
+            text_out.close()
     finally:
-        if is_subprocess:
-            vcf_fp.stdout.close()
-            vcf_fp.wait()
+        feeder.join()
+        proc.wait()
 
 
 def _apply_pon_streaming(
@@ -93,12 +155,8 @@ def _apply_pon_streaming(
         input_variant_dict_set_contig,
         input_variant_dict_id_set_contig,
         input_ids_by_contig_pos,
-        nonsomatic_filter_variant_dict_id_set_contig):
-    """
-    Stream PoN once; update nonsomatic_filter and build per-PoN intersection sets.
-    Semantics match bulk set intersection / difference on full PoN sets.
-    Returns (input_inter_pon_variant_dict_id_set_contig, used_successful_tabix_single_contig).
-    """
+        nonsomatic_filter_variant_dict_id_set_contig,
+        skip_pon_md5=False):
     input_inter_pon_variant_dict_id_set_contig = defaultdict(set)
 
     def apply_one(chromosome, position, reference, alternate):
@@ -121,15 +179,22 @@ def _apply_pon_streaming(
 
     contigs_to_fetch = [ctg_name] if ctg_name is not None else list(input_keys_list)
     use_tabix = str(pon_vcf_fn).endswith('.gz') and _pon_has_tabix_index(str(pon_vcf_fn))
-    snapshot_filter = {k: set(v) for k, v in nonsomatic_filter_variant_dict_id_set_contig.items()}
     used_tabix_ok = False
 
     def run_gzip_stream():
-        for rec in _iter_pon_vcf_records_gzip(str(pon_vcf_fn), ctg_name, input_keys_list):
+        md5_obj = None if skip_pon_md5 else hashlib.md5()
+        for rec in _iter_pon_vcf_records_stream(
+                str(pon_vcf_fn), ctg_name, input_keys_list, md5_hash=md5_obj):
             apply_one(*rec)
+        if skip_pon_md5:
+            return None
+        return md5_obj.hexdigest()
+
+    stream_file_md5 = None
 
     if use_tabix and len(contigs_to_fetch) == 1 and len(input_keys_list) > 0:
         contig = contigs_to_fetch[0]
+        snapshot_filter = None
         try:
             proc = subprocess.Popen(
                 ['tabix', '-f', str(pon_vcf_fn), contig],
@@ -137,8 +202,9 @@ def _apply_pon_streaming(
         except (FileNotFoundError, OSError) as e:
             print("[WARNING] tabix not available or failed for {}: {}. Falling back to full-file stream.".format(
                 pon_vcf_fn, str(e)), file=sys.stderr)
-            run_gzip_stream()
+            stream_file_md5 = run_gzip_stream()
         else:
+            snapshot_filter = {k: set(v) for k, v in nonsomatic_filter_variant_dict_id_set_contig.items()}
             for line in proc.stdout:
                 rec = _parse_pon_line(line, None)
                 if rec is not None:
@@ -151,13 +217,20 @@ def _apply_pon_streaming(
                 for k in snapshot_filter:
                     nonsomatic_filter_variant_dict_id_set_contig[k] = set(snapshot_filter[k])
                 input_inter_pon_variant_dict_id_set_contig.clear()
-                run_gzip_stream()
+                stream_file_md5 = run_gzip_stream()
             else:
                 used_tabix_ok = True
     else:
-        run_gzip_stream()
+        stream_file_md5 = run_gzip_stream()
 
-    return input_inter_pon_variant_dict_id_set_contig, used_tabix_ok
+    if skip_pon_md5:
+        md5_slot = '__skipped__'
+    elif used_tabix_ok:
+        md5_slot = None
+    else:
+        md5_slot = stream_file_md5
+
+    return input_inter_pon_variant_dict_id_set_contig, used_tabix_ok, md5_slot
 
 
 def nonsomatic_tag(args):
@@ -165,12 +238,12 @@ def nonsomatic_tag(args):
         _nonsomatic_tag_impl(args)
     except MemoryError:
         print("\n[ERROR] Out of memory (OOM) during non-somatic tagging. PoN files may be too large for available RAM.", file=sys.stderr)
-        print("[ERROR] Consider: 1) Using fewer/smaller PoN files; 2) Increasing system memory; 3) Ensure PoN files have .tbi index for lower-RAM tabix mode.", file=sys.stderr)
+        print("[ERROR] Consider: 1) --skip_pon_md5 to skip a full-file read per PoN; 2) Fewer/smaller PoN files; 3) System memory; 4) PoN .tbi for tabix mode.", file=sys.stderr)
         sys.exit(1)
     except OSError as e:
         if 'Cannot allocate memory' in str(e) or 'errno 12' in str(e):
             print("\n[ERROR] Out of memory (OOM) during non-somatic tagging: {}".format(e), file=sys.stderr)
-            print("[ERROR] Consider: 1) Using fewer/smaller PoN files; 2) Increasing system memory; 3) Ensure PoN files have .tbi index.", file=sys.stderr)
+            print("[ERROR] Consider: 1) --skip_pon_md5; 2) Fewer/smaller PoNs; 3) Memory; 4) PoN .tbi index.", file=sys.stderr)
             sys.exit(1)
         raise
 
@@ -254,7 +327,7 @@ def _nonsomatic_tag_impl(args):
         for index, pon_vcf_fn in enumerate(pon_vcf_fn_list):
             require_allele = str2bool(pon_require_allele_matching_list[index])
 
-            input_inter_pon_variant_dict_id_set_contig, used_tabix_ok = _apply_pon_streaming(
+            input_inter_pon_variant_dict_id_set_contig, _, pon_md5_slot = _apply_pon_streaming(
                 str(pon_vcf_fn),
                 ctg_name,
                 input_keys_list,
@@ -263,10 +336,8 @@ def _nonsomatic_tag_impl(args):
                 input_variant_dict_id_set_contig,
                 input_ids_by_contig_pos,
                 nonsomatic_filter_variant_dict_id_set_contig,
+                skip_pon_md5=args.skip_pon_md5,
             )
-
-            if used_tabix_ok:
-                print("[INFO] PoN {} loaded by tabix (contig-specific, lower RAM)".format(os.path.basename(pon_vcf_fn)))
 
             input_inter_pon_variant_dict_id_set_contig_list.append(
                 input_inter_pon_variant_dict_id_set_contig)
@@ -278,7 +349,12 @@ def _nonsomatic_tag_impl(args):
 
             print("[INFO] Processing in {}: tagged by {} PoN: {}".format(ctg_name, str(pon_vcf_fn), total_filter_by_pon))
 
-            pon_vcf_md5 = calculate_file_md5(str(pon_vcf_fn))
+            if pon_md5_slot == '__skipped__':
+                pon_vcf_md5 = 'skipped'
+            elif pon_md5_slot is not None:
+                pon_vcf_md5 = pon_md5_slot
+            else:
+                pon_vcf_md5 = calculate_file_md5(str(pon_vcf_fn))
             pon_vcf_header_info = '##INFO=<ID=PoN_{},Number=0,Type=Flag,Description="file={},md5={},allele_matching={},non-somatic variant tagged by panel of normals">'.format(index + 1, str(pon_vcf_fn), pon_vcf_md5, pon_require_allele_matching_list[index])
             pon_vcf_header_info_list.append(pon_vcf_header_info)
 
@@ -300,6 +376,16 @@ def _nonsomatic_tag_impl(args):
         total_remain_passes += len(nonsomatic_filter_variant_dict_id_set_contig[k])
 
     print("[INFO] Processing in {}: tagged by all panel of normals: {}, remained pass calls: {}".format(ctg_name, total_filter_by_all, total_remain_passes))
+
+    pon_hit_totals = []
+    for idx in range(len(pon_vcf_fn_list)):
+        inter = input_inter_pon_variant_dict_id_set_contig_list[idx]
+        pon_hit_totals.append(sum(len(inter[c]) for c in inter))
+
+    summary_line = _tagging_summary_line(
+        ctg_name, total_input, total_filter_by_all, total_remain_passes,
+        pon_vcf_fn_list, pon_hit_totals)
+    print("[INFO] NonSomaticTaggingSummary: {}".format(summary_line))
 
     contigs_order = major_contigs_order + input_keys_list
     contigs_order_list = sorted(input_keys_list, key=lambda x: contigs_order.index(x))
@@ -389,6 +475,9 @@ def main():
 
     parser.add_argument("--disable_print_nonsomatic_calls", action='store_true',
                         help="Disable print non-somatic calls. Default: enable non-somatic calls printing")
+
+    parser.add_argument('--skip_pon_md5', action='store_true',
+                        help="Skip PoN file MD5 (VCF header uses md5=skipped). Removes one full sequential read per PoN when using tabix, and reduces I/O when large PoNs would otherwise be read twice.")
 
     global args
     args = parser.parse_args()
