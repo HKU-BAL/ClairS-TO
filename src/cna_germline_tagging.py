@@ -56,7 +56,7 @@ def get_contigs(args):
 def tumor_allele_counter_command(args):
     contig_list = get_contigs(args)
 
-    command = f'time {args.parallel} -j{args.threads} '
+    command = f'{args.parallel} -j{args.threads} '
     command += f'LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{args.allele_counter}/lib" {args.allele_counter}/bin/alleleCounter '
     command += f'-b {args.tumor_bam_fn} '
     command += f'-l {args.cna_resource_dir}/loci_files/G1000_loci_hg38_{{1}}.txt '
@@ -74,7 +74,7 @@ def tumor_allele_counter_command(args):
 def normal_allele_counter_command(args):
     contig_list = get_contigs(args)
 
-    command = f'time {args.parallel} -j{args.threads} '
+    command = f'{args.parallel} -j{args.threads} '
     command += f'LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{args.allele_counter}/lib" {args.allele_counter}/bin/alleleCounter '
     command += f'-b {args.normal_bam_fn} '
     command += f'-l {args.cna_resource_dir}/loci_files/G1000_loci_hg38_{{1}}.txt '
@@ -90,7 +90,7 @@ def normal_allele_counter_command(args):
 
 
 def get_logr_baf_command(args):
-    command = f'time {args.python} {args.verdict}/get_logr_and_baf.py '
+    command = f'{args.python} {args.verdict}/get_logr_and_baf.py '
     command += f'--tumor_allele_counts_file_prefix {args.output_dir}/{args.tumor_sample_name}_AlleleCount_ '
     command += f'--alleles_file_prefix {args.cna_resource_dir}/allele_files/G1000_alleles_hg38_ '
     command += f'--tumor_logr_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR.txt '
@@ -102,7 +102,7 @@ def get_logr_baf_command(args):
 
 
 def correct_logr_command(args):
-    command = f'time {args.python} {args.verdict}/correct_logr.py '
+    command = f'{args.python} {args.verdict}/correct_logr.py '
     command += f'--tumor_logr_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR.txt '
     command += f'--gc_content_file {args.cna_resource_dir}/GC_G1000_hg38.txt '
     command += f'--replication_timing_file {args.cna_resource_dir}/RT_G1000_hg38.txt '
@@ -113,7 +113,7 @@ def correct_logr_command(args):
 
 
 def predict_germline_genotypes_command(args):
-    command = f'time {args.python} {args.verdict}/predict_germline_genotypes.py '
+    command = f'{args.python} {args.verdict}/predict_germline_genotypes.py '
     command += f'--tumor_logr_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR_Correction.txt '
     command += f'--tumor_baf_file {args.output_dir}/{args.tumor_sample_name}_Tumor_BAF.txt '
     command += f'--germline_genotypes_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_GG.txt '
@@ -128,7 +128,7 @@ def predict_germline_genotypes_command(args):
 
 
 def create_aspcf_command(args):
-    command = f'time {args.python} {args.verdict}/aspcf.py '
+    command = f'{args.python} {args.verdict}/aspcf.py '
     command += f'--tumor_logr_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR_Correction.txt '
     command += f'--tumor_baf_file {args.output_dir}/{args.tumor_sample_name}_Tumor_BAF.txt '
     command += f'--germline_genotypes_file {args.output_dir}/{args.tumor_sample_name}_Tumor_GG.txt '
@@ -141,7 +141,7 @@ def create_aspcf_command(args):
 
 
 def create_verdict_run_ascat_command(args):
-    command = f'time {args.python} {args.verdict}/run_ascat.py '
+    command = f'{args.python} {args.verdict}/run_ascat.py '
     command += f'--tumor_logr_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR_Correction.txt '
     command += f'--tumor_baf_file {args.output_dir}/{args.tumor_sample_name}_Tumor_BAF.txt '
     command += f'--germline_genotypes_file {args.output_dir}/{args.tumor_sample_name}_Tumor_GG.txt '
@@ -155,7 +155,7 @@ def create_verdict_run_ascat_command(args):
 
 
 def tag_germline_variant(args):
-    command = f'time {args.python} {args.verdict}/tag_germline_variant.py '
+    command = f'{args.python} {args.verdict}/tag_germline_variant.py '
     command += f'--input_vcf_fn {args.input_vcf_fn} '
     command += f'--output_fn {args.output_fn} '
     command += f'--tumor_purity_ploidy_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_Purity_Ploidy.txt '
