@@ -58,8 +58,45 @@ major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] 
                                                                                    list(range(1, 23)) + ["X", "Y"]]
 
 file_directory = os.path.dirname(os.path.realpath(__file__))
+_sys_src_dir = os.path.join(file_directory, "src")
+if _sys_src_dir not in sys.path:
+    sys.path.insert(0, _sys_src_dir)
+from haplotype_filtering import (
+    DEFAULT_HAPLOTYPE_CHUNK_CANDIDATES_PER_MPILEUP,
+    DEFAULT_HAPLOTYPE_CHUNK_MAX_SPAN_BP,
+)
+
 main_entry = os.path.join(file_directory, "clairs_to.py")
 MAX_STEP = 20
+
+
+def _sanitize_sample_for_path(sample_name):
+    s = re.sub(r'[^0-9A-Za-z._-]+', '_', str(sample_name).strip())
+    s = s.strip('._-') or 'sample'
+    return s[:200]
+
+
+def _work_dir_basenames_from_sample(sample_name):
+    """Basenames: tmp/logs or tmp_<tag>/logs_<tag> when sample_name is not default."""
+    if sample_name is None or str(sample_name) == "SAMPLE":
+        return 'tmp', 'logs'
+    tag = _sanitize_sample_for_path(sample_name)
+    return 'tmp_{}'.format(tag), 'logs_{}'.format(tag)
+
+
+def _run_clairs_to_log_basename(sample_name, dry_run):
+    if sample_name is None or str(sample_name) == "SAMPLE":
+        return 'run_clairs_to.log' if not dry_run else 'run_clairs_to_dry_run.log'
+    tag = _sanitize_sample_for_path(sample_name)
+    if dry_run:
+        return 'run_clairs_to_{}_dry_run.log'.format(tag)
+    return 'run_clairs_to_{}.log'.format(tag)
+
+
+def _is_ilmn_family_platform(platform):
+    p = str(platform or '')
+    return p == 'ilmn' or p.startswith('ilmn_')
+
 
 OutputPath = namedtuple('OutputPath', [
     'log_path',
@@ -99,10 +136,14 @@ def logging(str):
 
 
 def create_output_folder(args):
-    # create temp file folder
     args.output_dir = folder_path_from(args.output_dir, create_not_found=True)
-    log_path = folder_path_from(os.path.join(args.output_dir, 'logs'), create_not_found=True)
-    tmp_file_path = folder_path_from(os.path.join(args.output_dir, 'tmp'), create_not_found=True)
+    tmp_bn, logs_bn = _work_dir_basenames_from_sample(args.sample_name)
+    args.tmp_dir_basename = tmp_bn
+    args.logs_dir_basename = logs_bn
+    args.work_tmp = os.path.join(args.output_dir, tmp_bn)
+    args.work_logs = os.path.join(args.output_dir, logs_bn)
+    log_path = folder_path_from(args.work_logs, create_not_found=True)
+    tmp_file_path = folder_path_from(args.work_tmp, create_not_found=True)
     split_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_beds'), create_not_found=True)
     split_indel_bed_path = folder_path_from(os.path.join(tmp_file_path, 'split_indel_beds'), create_not_found=True) if not args.disable_indel_calling else None
     candidates_path = folder_path_from(os.path.join(tmp_file_path, 'candidates'), create_not_found=True)
@@ -112,8 +153,8 @@ def create_output_folder(args):
                                                          create_not_found=True)
     vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'vcf_output'), create_not_found=True)
 
-    if args.platform != 'ilmn':
-        phasing_log_path = folder_path_from(os.path.join(args.output_dir, 'logs', 'phasing_log'), create_not_found=True)
+    if not _is_ilmn_family_platform(args.platform):
+        phasing_log_path = folder_path_from(os.path.join(args.work_logs, 'phasing_log'), create_not_found=True)
         phasing_phased_vcf_output_path = folder_path_from(os.path.join(tmp_file_path, 'phasing_output/phased_vcf_output'), create_not_found=True)
         phasing_phased_bam_output_path = folder_path_from(os.path.join(tmp_file_path, 'phasing_output/phased_bam_output'), create_not_found=True)
 
@@ -233,7 +274,6 @@ def check_contig_in_bam(bam_fn, sorted_contig_list, samtools, allow_none=False, 
 
 def check_threads(args):
     threads = args.threads
-    # sched_getaffinity is not exist in pypy
     try:
         sched_getaffinity_list = list(os.sched_getaffinity(0))
         num_cpus = len(sched_getaffinity_list)
@@ -331,7 +371,7 @@ def write_region_bed(region):
     if ctg_end < ctg_start or ctg_start < 0 or ctg_end < 0:
         sys.exit("[ERROR] Invalid region input: {}".format(region))
 
-    output_bed_path = os.path.join(args.output_dir, 'tmp', 'region.bed')
+    output_bed_path = os.path.join(args.work_tmp, 'region.bed')
     with open(output_bed_path, 'w') as f:
         f.write('\t'.join([ctg_name, str(ctg_start), str(ctg_end)]) + '\n')
     return output_bed_path
@@ -349,8 +389,8 @@ def check_contigs_intersection(args, fai_fn):
     if args.region is not None:
         args.bed_fn = write_region_bed(args.region)
 
-    split_bed_path = os.path.join(args.output_dir, 'tmp', 'split_beds')
-    split_indel_bed_path = os.path.join(args.output_dir, 'tmp', 'split_indel_beds') if not args.disable_indel_calling else None
+    split_bed_path = os.path.join(args.work_tmp, 'split_beds')
+    split_indel_bed_path = os.path.join(args.work_tmp, 'split_indel_beds') if not args.disable_indel_calling else None
     tree = bed_tree_from(bed_file_path=args.bed_fn, region=args.region)
     know_vcf_contig_set = split_extend_vcf(genotyping_mode_vcf_fn=args.genotyping_mode_vcf_fn,
                                            output_fn=split_bed_path) if is_known_vcf_file_provided else set()
@@ -381,7 +421,6 @@ def check_contigs_intersection(args, fai_fn):
         contig_set = contig_set.union(
             know_vcf_contig_set) if is_known_vcf_file_provided else contig_set
 
-    # if each split region is too small(long) for given default chunk num, will increase(decrease) the total chunk num
     default_chunk_num = 0
     DEFAULT_CHUNK_SIZE = args.chunk_size
     contig_length_list = []
@@ -440,7 +479,6 @@ def check_contigs_intersection(args, fai_fn):
             if c not in contig_chunk_num:
                 logging(log_warning(("[WARNING] Contig {} given but not found in the reference".format(c))))
 
-        # check contig in bam have support reads
         sorted_contig_list, tumor_found_contig = check_contig_in_bam(bam_fn=args.tumor_bam_fn,
                                                                      sorted_contig_list=sorted_contig_list,
                                                                      samtools=args.samtools, is_tumor=True)
@@ -475,7 +513,7 @@ def check_contigs_intersection(args, fai_fn):
     if not args.disable_indel_calling and is_indel_bed_file_provided:
         split_extend_bed(bed_fn=args.call_indels_only_in_these_regions, output_fn=split_indel_bed_path, contig_set=contig_set, expand_region=False)
 
-    contig_path = os.path.join(args.output_dir, 'tmp', 'CONTIGS')
+    contig_path = os.path.join(args.work_tmp, 'CONTIGS')
     with open(contig_path, 'w') as output_file:
         output_file.write('\n'.join(sorted_contig_list))
 
@@ -487,7 +525,7 @@ def check_contigs_intersection(args, fai_fn):
             logging(log_warning(
                 "[WARNING] Verdict currently only works for GRCh38 reference genome, apply the --disable_verdict option!"))
         elif args.cna_resource_dir is not None:
-            # Fail before alleleCounter: require G1000 loci per called autosome/X (same names as cna_germline_tagging).
+            # Verdict needs G1000 loci per autosome/X (same layout as cna_germline_tagging); fail before alleleCounter.
             loci_dir = os.path.join(args.cna_resource_dir, 'loci_files')
             missing_loci = []
             for ctg in sorted_contig_list:
@@ -506,7 +544,7 @@ def check_contigs_intersection(args, fai_fn):
                         loci_dir, os.path.basename(missing_loci[0]))))
 
     chunk_list = []
-    chunk_list_path = os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
+    chunk_list_path = os.path.join(args.work_tmp, 'CHUNK_LIST')
     with open(chunk_list_path, 'w') as output_file:
         for contig_name in sorted_contig_list:
             chunk_num = contig_chunk_num[contig_name] if args.chunk_num is None else args.chunk_num
@@ -836,15 +874,16 @@ def check_args(args):
         args.whatshap = os.path.join(args.conda_prefix, 'bin', 'whatshap')
     if args.longphase is None:
         args.longphase = os.path.join(args.conda_prefix, 'bin', 'longphase')
-    args.use_longphase_for_intermediate_phasing = False if args.use_whatshap_for_intermediate_phasing is True else True
-    if args.use_longphase_for_intermediate_phasing and not os.path.exists(args.longphase):
-        sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
-    if args.use_whatshap_for_intermediate_phasing and not os.path.exists(args.whatshap):
-        sys.exit(log_error("[ERROR] Cannot find whatshap at {}".format(args.whatshap)))
-    if args.use_longphase_for_intermediate_haplotagging is None:
-        args.use_longphase_for_intermediate_haplotagging = True
-    if args.use_longphase_for_intermediate_haplotagging and not os.path.exists(args.longphase):
-        sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
+    if not _is_ilmn_family_platform(args.platform):
+        args.use_longphase_for_intermediate_phasing = False if args.use_whatshap_for_intermediate_phasing is True else True
+        if args.use_longphase_for_intermediate_phasing and not os.path.exists(args.longphase):
+            sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
+        if args.use_whatshap_for_intermediate_phasing and not os.path.exists(args.whatshap):
+            sys.exit(log_error("[ERROR] Cannot find whatshap at {}".format(args.whatshap)))
+        if args.use_longphase_for_intermediate_haplotagging is None:
+            args.use_longphase_for_intermediate_haplotagging = True
+        if args.use_longphase_for_intermediate_haplotagging and not os.path.exists(args.longphase):
+            sys.exit(log_error("[ERROR] Cannot find longphase at {}".format(args.longphase)))
 
     if args.snv_min_af is None:
         args.snv_min_af = param.snv_min_af
@@ -918,7 +957,13 @@ def check_args(args):
             logging(log_warning(
                 "[WARNING] HET SNPs based phasing is disabled if `--genotyping_mode_vcf_fn` is provided, add `--phase_tumor True` if phasing the tumor is still needed. Please ensure you have sufficient heterozygous variant candidates given in the --genotyping_mode_vcf_fn file, otherwise the phasing step might lead to worse performance."))
         else:
-            args.phase_tumor = True if args.platform != 'ilmn' else False
+            args.phase_tumor = True if not _is_ilmn_family_platform(args.platform) else False
+
+    if _is_ilmn_family_platform(args.platform):
+        if args.phase_tumor:
+            logging(log_warning(
+                "[WARNING] Intermediate phasing/haplotagging is not used for Illumina (ilmn) platform; ignoring --phase_tumor."))
+        args.phase_tumor = False
 
     if not args.disable_verdict:
         ref_contigs_set = set()
@@ -967,6 +1012,15 @@ def check_args(args):
     legal_range_from(param_name="indel_min_af", x=args.indel_min_af, min_num=0, max_num=1, exit_out_of_range=True)
     legal_range_from(param_name="chunk_size", x=args.chunk_size, min_num=0, exit_out_of_range=True)
 
+    if str(args.sample_name) != "SAMPLE":
+        tag = _sanitize_sample_for_path(args.sample_name)
+        if args.snv_output_prefix == "snv":
+            args.snv_output_prefix = "snv_{}".format(tag)
+            logging("[INFO] --sample_name set: SNV output prefix -> {}".format(args.snv_output_prefix))
+        if args.indel_output_prefix == "indel":
+            args.indel_output_prefix = "indel_{}".format(tag)
+            logging("[INFO] --sample_name set: Indel output prefix -> {}".format(args.indel_output_prefix))
+
     args.output_path = create_output_folder(args)
     check_tools_version(args=args)
     args = check_threads(args=args)
@@ -984,6 +1038,9 @@ def print_args(args):
     logging("[INFO] PLATFORM: {}".format(args.platform))
     logging("[INFO] THREADS: {}".format(args.threads))
     logging("[INFO] OUTPUT FOLDER: {}".format(args.output_dir))
+    if str(args.sample_name) != "SAMPLE":
+        logging("[INFO] INTERMEDIATE TMP (per sample): {}".format(args.work_tmp))
+        logging("[INFO] INTERMEDIATE LOGS (per sample): {}".format(args.work_logs))
     logging("[INFO] SNV OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.snv_output_prefix + '.vcf.gz')))
     logging("[INFO] INDEL OUTPUT VCF PATH: {}".format(os.path.join(args.output_dir, args.indel_output_prefix + '.vcf.gz')))
     logging("[INFO] SNV MINIMUM AF: {}".format(args.snv_min_af))
@@ -1019,6 +1076,7 @@ def print_args(args):
     logging("[INFO] DISABLE APPLYING VERDICT: {}".format(args.disable_verdict))
     logging("[INFO] DISABLE APPLYING NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
     logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS: {}".format(args.do_not_print_nonsomatic_calls))
+    logging("[INFO] SKIP PON FILE MD5 (non-somatic tagging): {}".format(args.skip_pon_md5))
     logging("")
 
     if args.platform.startswith('ont'):
@@ -1031,7 +1089,7 @@ def print_args(args):
         args.platform = 'ilmn'
 
     if args.cmdline is not None and args.cmdline != "":
-        with open(args.output_dir + '/tmp/CMD', 'w') as f:
+        with open(args.work_tmp + '/CMD', 'w') as f:
             f.write(args.cmdline + '\n')
 
     return args
@@ -1104,6 +1162,7 @@ def print_command_line(args):
         cmdline += '--disable_verdict ' if args.disable_verdict else ""
         cmdline += '--disable_nonsomatic_tagging ' if args.disable_nonsomatic_tagging else ""
         cmdline += '--do_not_print_nonsomatic_calls ' if args.do_not_print_nonsomatic_calls else ""
+        cmdline += '--skip_pon_md5 ' if args.skip_pon_md5 else ""
         args.cmdline = cmdline
     except:
         return args
@@ -1116,7 +1175,7 @@ def somatic_calling(args):
     step = 1
     echo_list = []
     commands_list = []
-    phasing_output_path = args.output_dir + '/tmp/phasing_output'
+    phasing_output_path = args.work_tmp + '/phasing_output'
     tumor_bam_prefix = phasing_output_path + '/phased_bam_output/tumor_' if args.phase_tumor else args.tumor_bam_fn
 
     try:
@@ -1125,12 +1184,10 @@ def somatic_calling(args):
     except subprocess.CalledProcessError as e:
         time = ''
 
-    # Somatic Calling
-    # STEP 1: EXTRACT CANDIDATES
     echo_list.append("[INFO] STEP 1: Extract Variant Candidates from Tumor BAM")
     step += 1
     ec_command = '( ' + time + args.parallel
-    ec_command += ' --joblog ' + args.output_dir + '/logs/parallel_1_extract_tumor_candidates.log'
+    ec_command += ' --joblog ' + args.work_logs + '/parallel_1_extract_tumor_candidates.log'
     ec_command += ' -C " " -j ' + str(args.threads)
     ec_command += ' ' + args.pypy + ' ' + main_entry + ' extract_candidates_calling'
     ec_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -1145,28 +1202,26 @@ def somatic_calling(args):
     ec_command += ' --min_coverage ' + str(args.min_coverage)
     ec_command += ' --min_bq ' + str(args.min_bq)
     ec_command += ' --bed_fn_source ' + str(args.bed_fn)
-    ec_command += ' --bed_fn ' + os.path.join(args.output_dir, 'tmp', 'split_beds', '{1}')
+    ec_command += ' --bed_fn ' + os.path.join(args.work_tmp, 'split_beds', '{1}')
     if not args.disable_indel_calling:
-        ec_command += ' --call_indels_only_in_these_regions ' + os.path.join(args.output_dir, 'tmp', 'split_indel_beds', '{1}')
+        ec_command += ' --call_indels_only_in_these_regions ' + os.path.join(args.work_tmp, 'split_indel_beds', '{1}')
         ec_command += ' --select_indel_candidates True'
-    ec_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
+    ec_command += ' --candidates_folder ' + args.work_tmp + '/candidates'
     ec_command += ' --output_depth True '
     ec_command += ' --genotyping_mode_vcf_fn ' + str(args.genotyping_mode_vcf_fn)
     ec_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
-    ec_command += ' :::: ' + os.path.join(args.output_dir, 'tmp', 'CHUNK_LIST')
-    ec_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/1_EC.log'
+    ec_command += ' :::: ' + os.path.join(args.work_tmp, 'CHUNK_LIST')
+    ec_command += ' ) 2>&1 | tee ' + args.work_logs + '/1_EC.log'
     ec_command += ' && ' + args.pypy + ' ' + main_entry + ' concat_files'
-    ec_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
+    ec_command += ' --input_dir ' + os.path.join(args.work_tmp, 'candidates')
     ec_command += ' --input_prefix ' + "SNV_CANDIDATES_FILE_"
     ec_command += ' --output_fn SNV_CANDIDATES_FILES'
     commands_list.append(ec_command)
 
-    ## STEP 2: SNV PILEUP MODEL CALLING
-    ## CREATE SNV PILEUP TENSOR
     echo_list.append("[INFO] STEP 2: SNV Pileup Model Calling\n")
     echo_list[-1] += ("[INFO] Create Tensors for SNV Pileup Affirmative Model")
     cpt_aff_command = '( ' + time + args.parallel
-    cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_affirmative_snv.log'
+    cpt_aff_command += ' --joblog ' + args.work_logs + '/parallel_2-1_create_tensor_affirmative_snv.log'
     cpt_aff_command += ' -j ' + str(args.threads)
     cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
     cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -1177,21 +1232,21 @@ def somatic_calling(args):
     cpt_aff_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
     cpt_aff_command += ' --samtools ' + args.samtools
     cpt_aff_command += ' --candidates_bed_regions {1}'
-    cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+    cpt_aff_command += ' --tensor_can_fn ' + args.work_tmp + '/pileup_tensor_can_affirmative/{1/} '
     cpt_aff_command += ' --platform ' + args.platform
-    cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
-    cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Affirmative_SNV.log'
+    cpt_aff_command += ' :::: ' + args.work_tmp + '/candidates/SNV_CANDIDATES_FILES'
+    cpt_aff_command += ' ) 2>&1 | tee ' + args.work_logs + '/2-1_CPT_Affirmative_SNV.log'
     commands_list += [cpt_aff_command]
 
     if args.platform == 'ilmn':
         echo_list.append("[INFO] Create Tensors for SNV Pileup Negational Model")
-        cpt_neg_command = "ln -sf {} {}".format(args.output_dir + '/tmp/pileup_tensor_can_affirmative/*_snv',
-                                                args.output_dir + '/tmp/pileup_tensor_can_negational/')
+        cpt_neg_command = "ln -sf {} {}".format(args.work_tmp + '/pileup_tensor_can_affirmative/*_snv',
+                                                args.work_tmp + '/pileup_tensor_can_negational/')
         commands_list += [cpt_neg_command]
     else:
         echo_list.append("[INFO] Create Tensors for SNV Pileup Negational Model")
         cpt_neg_command = '( ' + time + args.parallel
-        cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-1_create_tensor_negational_snv.log'
+        cpt_neg_command += ' --joblog ' + args.work_logs + '/parallel_2-1_create_tensor_negational_snv.log'
         cpt_neg_command += ' -j ' + str(args.threads)
         cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
         cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -1202,21 +1257,20 @@ def somatic_calling(args):
         cpt_neg_command += ' --min_bq 0'
         cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
         cpt_neg_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
-        cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+        cpt_neg_command += ' --tensor_can_fn ' + args.work_tmp + '/pileup_tensor_can_negational/{1/} '
         cpt_neg_command += ' --platform ' + args.platform
-        cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
-        cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-1_CPT_Negational_SNV.log'
+        cpt_neg_command += ' :::: ' + args.work_tmp + '/candidates/SNV_CANDIDATES_FILES'
+        cpt_neg_command += ' ) 2>&1 | tee ' + args.work_logs + '/2-1_CPT_Negational_SNV.log'
         commands_list += [cpt_neg_command]
 
-    # PREDICT SNV
     echo_list.append("[INFO] SNV Pileup Model Prediction along with Affirmative & Negational Model")
     p_predict_command = '( ' + time + args.parallel
-    p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-2_predict_snv.log'
+    p_predict_command += ' --joblog ' + args.work_logs + '/parallel_2-2_predict_snv.log'
     p_predict_command += ' -j ' + str(args.threads)
     p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
-    p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
-    p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
-    p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+    p_predict_command += ' --tensor_fn_acgt ' + args.work_tmp + '/pileup_tensor_can_affirmative/{1/} '
+    p_predict_command += ' --tensor_fn_nacgt ' + args.work_tmp + '/pileup_tensor_can_negational/{1/} '
+    p_predict_command += ' --predict_fn ' + args.work_tmp + '/predict/{1/} '
     p_predict_command += ' --chkpnt_fn_acgt ' + args.snv_pileup_affirmative_model_path
     p_predict_command += ' --chkpnt_fn_nacgt ' + args.snv_pileup_negational_model_path
     p_predict_command += ' --use_gpu ' + str(args.use_gpu)
@@ -1225,47 +1279,44 @@ def somatic_calling(args):
     p_predict_command += ' --pileup '
     p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
     p_predict_command += ' --disable_indel_calling True'
-    p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
-    p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-2_PREDICT_SNV.log'
+    p_predict_command += ' :::: ' + args.work_tmp + '/candidates/SNV_CANDIDATES_FILES'
+    p_predict_command += ' ) 2>&1 | tee ' + args.work_logs + '/2-2_PREDICT_SNV.log'
     commands_list += [p_predict_command]
 
-    # CALL SNV VARIANTS
     echo_list.append("[INFO] SNV Pileup Model Calling Variants")
     cv_command = '( ' + time + args.parallel
-    cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_2-3_call_variants_snv.log'
+    cv_command += ' --joblog ' + args.work_logs + '/parallel_2-3_call_variants_snv.log'
     cv_command += ' -j ' + str(args.threads)
     cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
-    cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-    cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
+    cv_command += ' --predict_fn ' + args.work_tmp + '/predict/{1/} '
+    cv_command += ' --call_fn ' + args.work_tmp + '/vcf_output/p_{1/}.vcf'
     cv_command += ' --ref_fn ' + args.ref_fn
     cv_command += ' --platform ' + args.platform
     cv_command += ' --likelihood_matrix_data {} '.format(
         args.snv_likelihood_matrix_data) if args.snv_likelihood_matrix_data is not None else ''
     cv_command += ' --show_ref ' if args.print_ref_calls else ""
     cv_command += ' --disable_indel_calling True'
-    cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/SNV_CANDIDATES_FILES'
-    cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/2-3_CALL_VARIANTS_SNV.log'
+    cv_command += ' :::: ' + args.work_tmp + '/candidates/SNV_CANDIDATES_FILES'
+    cv_command += ' ) 2>&1 | tee ' + args.work_logs + '/2-3_CALL_VARIANTS_SNV.log'
     commands_list += [cv_command]
 
-    # MERGE CALLING SNV VCFs
     echo_list.append("[INFO] Merge SNV VCFs")
     p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
     p_mv_command += ' --ref_fn ' + args.ref_fn
-    p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
-    p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+    p_mv_command += ' --contigs_fn ' + os.path.join(args.work_tmp, 'CONTIGS')
+    p_mv_command += ' --input_dir ' + args.work_tmp + '/vcf_output'
     p_mv_command += ' --vcf_fn_suffix ' + 'snv.vcf'
-    p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+    p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
     commands_list += [p_mv_command]
 
     if not args.disable_nonsomatic_tagging:
-        # STEP 3: SNV NON-SOMATIC TAGGING
         echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
         gf_command = '( ' + time + args.parallel
-        gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_3_nonsomatic_tagging_snv.log'
+        gf_command += ' --joblog ' + args.work_logs + '/parallel_3_nonsomatic_tagging_snv.log'
         gf_command += ' -j ' + str(args.threads)
         gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
-        gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
-        gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_nonsomatic_tagging_{1}.vcf'
+        gf_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
+        gf_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/snv_nonsomatic_tagging_{1}.vcf'
         gf_command += ' --ctg_name {1} '
         gf_command += ' --pypy3 ' + args.pypy
         gf_command += ' --parallel ' + args.parallel
@@ -1275,43 +1326,42 @@ def somatic_calling(args):
             args.panel_of_normals) if args.panel_of_normals is not None else ''
         gf_command += ' --panel_of_normals_require_allele_matching {} '.format(
             args.panel_of_normals_require_allele_matching) if args.panel_of_normals_require_allele_matching is not None else ''
-        gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-        gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/3_NONSOMATIC_TAG_SNV.log'
+        gf_command += ' --skip_pon_md5 ' if args.skip_pon_md5 else ''
+        gf_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+        gf_command += ' ) 2>&1 | tee ' + args.work_logs + '/3_NONSOMATIC_TAG_SNV.log'
         commands_list += [gf_command]
 
-        # MERGE SNV NON-SOMATIC TAGGING VCFs
         echo_list.append("[INFO] Merge SNV Non-somatic Tagging VCFs")
         p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
         p_mv_command += ' --ref_fn ' + args.ref_fn
-        p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
-        p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+        p_mv_command += ' --contigs_fn ' + os.path.join(args.work_tmp, 'CONTIGS')
+        p_mv_command += ' --input_dir ' + args.work_tmp + '/vcf_output'
         p_mv_command += ' --vcf_fn_prefix ' + 'snv_nonsomatic_tagging_'
-        p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
+        p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
         commands_list += [p_mv_command]
     else:
-        # STEP 3: SNV NON-SOMATIC TAGGING
         echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
-        nst_command = "ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/snv_pileup.vcf',
-                                            args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf')
+        nst_command = "ln -sf {} {}".format(args.work_tmp + '/vcf_output/snv_pileup.vcf',
+                                            args.work_tmp + '/vcf_output/snv_pileup_nonsomatic_tagging.vcf')
         commands_list += [nst_command]
 
-    if args.platform != 'ilmn' and args.phase_tumor:
+    if not _is_ilmn_family_platform(args.platform) and args.phase_tumor:
         echo_list.append("[INFO] Select Heterozygous SNP for Phasing")
         ssp_command = '( ' + time + args.parallel
-        ssp_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_1_select_hetero_snp_for_phasing.log'
+        ssp_command += ' --joblog ' + args.work_logs + '/phasing_log/parallel_1_select_hetero_snp_for_phasing.log'
         ssp_command += ' -j ' + str(args.threads)
         ssp_command += ' ' + args.pypy + ' ' + main_entry + ' select_hetero_snp_for_phasing'
-        ssp_command += ' --tumor_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
+        ssp_command += ' --tumor_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
         ssp_command += ' --output_folder ' + phasing_output_path + '/vcf'
         ssp_command += ' --ctg_name {1}'
-        ssp_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-        ssp_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/1_select_hetero_snp_for_phasing.log'
+        ssp_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+        ssp_command += ' ) 2>&1 | tee ' + args.work_logs + '/phasing_log/1_select_hetero_snp_for_phasing.log'
         commands_list.append(ssp_command)
 
         echo_list.append("[INFO] Phase the Tumor BAM")
         if args.use_longphase_for_intermediate_phasing is not None:
             pt_command = '( ' + time + args.parallel
-            pt_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_2_phase_tumor.log'
+            pt_command += ' --joblog ' + args.work_logs + '/phasing_log/parallel_2_phase_tumor.log'
             pt_command += ' -j ' + str(args.threads)
             pt_command += ' ' + args.longphase + ' phase '
             pt_command += ' -s ' + phasing_output_path + '/vcf/{1}.vcf'
@@ -1320,15 +1370,15 @@ def somatic_calling(args):
             pt_command += ' -t ' + str(args.threads)
             pt_command += ' -o ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}'
             pt_command += ' --ont' if args.platform == 'ont' else ' --pb'
-            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+            pt_command += ' :::: ' + args.work_tmp + '/CONTIGS'
             pt_command += ' && ' + args.parallel
             pt_command += ' -j ' + str(args.threads)
             pt_command += ' bgzip -f ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf'
-            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-            pt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/2_phase_tumor.log'
+            pt_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+            pt_command += ' ) 2>&1 | tee ' + args.work_logs + '/phasing_log/2_phase_tumor.log'
         else:
             pt_command = '( ' + time + args.parallel
-            pt_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_2_phase_tumor.log'
+            pt_command += ' --joblog ' + args.work_logs + '/phasing_log/parallel_2_phase_tumor.log'
             pt_command += ' -j ' + str(args.threads)
             pt_command += ' ' + args.whatshap + ' phase '
             pt_command += ' --output ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
@@ -1337,19 +1387,19 @@ def somatic_calling(args):
             pt_command += ' --distrust-genotypes'
             pt_command += ' --ignore-read-groups'
             pt_command += ' ' + phasing_output_path + '/vcf/{1}.vcf'
-            pt_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-            pt_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/2_phase_tumor.log'
+            pt_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+            pt_command += ' ) 2>&1 | tee ' + args.work_logs + '/phasing_log/2_phase_tumor.log'
 
         tabix_command = args.parallel + ' -j ' + str(args.threads)
         tabix_command += ' tabix' + ' -f -p vcf'
         tabix_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
-        tabix_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        tabix_command += ' :::: ' + args.work_tmp + '/CONTIGS'
         commands_list.append(pt_command + ' && ' + tabix_command)
 
         echo_list.append("[INFO] Haplotag the Tumor BAM")
         if args.use_longphase_for_intermediate_haplotagging is not None:
             ht_command = '( ' + time + args.parallel
-            ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
+            ht_command += ' --joblog ' + args.work_logs + '/phasing_log/parallel_3_haplotag_tumor.log'
             ht_command += ' -j ' + str(args.threads)
             ht_command += ' ' + args.longphase + ' haplotag'
             ht_command += ' -o ' + phasing_output_path + '/phased_bam_output/tumor_{1}'
@@ -1357,11 +1407,11 @@ def somatic_calling(args):
             ht_command += ' --region {1} '
             ht_command += ' -s ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
             ht_command += ' -b ' + args.tumor_bam_fn
-            ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-            ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
+            ht_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+            ht_command += ' ) 2>&1 | tee ' + args.work_logs + '/phasing_log/3_tumor_haplotag.log'
         else:
             ht_command = '( ' + time + args.parallel
-            ht_command += ' --joblog ' + args.output_dir + '/logs/phasing_log/parallel_3_haplotag_tumor.log'
+            ht_command += ' --joblog ' + args.work_logs + '/phasing_log/parallel_3_haplotag_tumor.log'
             ht_command += ' -j ' + str(args.threads)
             ht_command += ' ' + args.whatshap + ' haplotag'
             ht_command += ' --output ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
@@ -1370,37 +1420,39 @@ def somatic_calling(args):
             ht_command += ' --ignore-read-groups'
             ht_command += ' ' + phasing_output_path + '/phased_vcf_output/tumor_phased_{1}.vcf.gz'
             ht_command += ' ' + args.tumor_bam_fn
-            ht_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-            ht_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/phasing_log/3_tumor_haplotag.log'
+            ht_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+            ht_command += ' ) 2>&1 | tee ' + args.work_logs + '/phasing_log/3_tumor_haplotag.log'
 
         index_command = args.parallel + ' -j ' + str(args.threads)
         index_command += ' ' + args.samtools + ' index '
         index_command += ' -@' + str(args.threads)
         index_command += ' ' + phasing_output_path + '/phased_bam_output/tumor_{1}.bam'
-        index_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
+        index_command += ' :::: ' + args.work_tmp + '/CONTIGS'
         commands_list.append(ht_command + ' && ' + index_command)
 
-    if args.platform == 'ilmn':
-        # STEP 4: SHORT-READ REALIGNMENT for SNV Variants
+    snv_nonsomatic_vcf = args.work_tmp + '/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
+    snv_filtered_vcf = args.work_tmp + '/vcf_output/snv_pileup_filtering.vcf'
+    # Illumina: always realign+postfilter. --disable_intermediate_phasing only skips long-read haplotype_filtering.
+    if _is_ilmn_family_platform(args.platform):
         echo_list.append("[INFO] STEP 4: Short-read Realignment for SNV Variants")
         realign_command = '( ' + time + args.python + ' ' + main_entry + ' realign_variants'
         realign_command += ' --bam_fn ' + args.tumor_bam_fn
         realign_command += ' --ref_fn ' + args.ref_fn
-        realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
-        realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_realignment.vcf'
+        realign_command += ' --pileup_vcf_fn ' + snv_nonsomatic_vcf
+        realign_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup_realignment.vcf'
         realign_command += ' --samtools ' + args.samtools
         realign_command += ' --python ' + args.python
         realign_command += ' --threads ' + str(args.threads)
         realign_command += ' --show_ref ' if args.print_ref_calls else ''
         realign_command += ' --enable_realignment ' + str(args.enable_realignment)
-        realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4-1_REALIGN_SNV.log'
+        realign_command += ' ) 2>&1 | tee ' + args.work_logs + '/4-1_REALIGN_SNV.log'
 
         postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
         postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
         postfilter_command += ' --ref_fn ' + args.ref_fn
-        postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_realignment.vcf'
-        postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
-        postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        postfilter_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup_realignment.vcf'
+        postfilter_command += ' --output_dir ' + args.work_tmp + '/vcf_output'
+        postfilter_command += ' --output_vcf_fn ' + snv_filtered_vcf
         postfilter_command += ' --samtools ' + args.samtools
         postfilter_command += ' --pypy3 ' + args.pypy
         postfilter_command += ' --parallel ' + args.parallel
@@ -1409,19 +1461,24 @@ def somatic_calling(args):
         postfilter_command += ' --show_ref ' if args.print_ref_calls else ''
         postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
         postfilter_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
-        postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4-2_POSTFILTER_SNV.log'
+        postfilter_command += ' --postfilter_variants_chunk_mode ' + str(args.postfilter_variants_chunk_mode)
+        postfilter_command += ' ) 2>&1 | tee ' + args.work_logs + '/4-2_POSTFILTER_SNV.log'
 
         commands_list += [realign_command + ' && ' + postfilter_command]
+        snv_pileup_for_postprocess = snv_filtered_vcf
+    elif args.disable_intermediate_phasing:
+        echo_list.append(
+            "[INFO] STEP 4: Skipped (SNV haplotype filtering; --disable_intermediate_phasing)")
+        snv_pileup_for_postprocess = snv_nonsomatic_vcf
     else:
-        # STEP 4: HAPLOTYPE FILTERING for SNV Variants
         echo_list.append("[INFO] STEP 4: Post Filtering for SNV Variants")
         hap_g_command = '( ' + time + args.pypy + ' ' + main_entry + ' haplotype_filtering'
         hap_g_command += ' --tumor_bam_fn ' + tumor_bam_prefix
         hap_g_command += ' --ref_fn ' + args.ref_fn
-        hap_g_command += ' --germline_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
-        hap_g_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
-        hap_g_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
-        hap_g_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+        hap_g_command += ' --germline_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
+        hap_g_command += ' --pileup_vcf_fn ' + snv_nonsomatic_vcf
+        hap_g_command += ' --output_dir ' + args.work_tmp + '/vcf_output'
+        hap_g_command += ' --output_vcf_fn ' + snv_filtered_vcf
         hap_g_command += ' --samtools ' + args.samtools
         hap_g_command += ' --pypy3 ' + args.pypy
         hap_g_command += ' --parallel ' + args.parallel
@@ -1430,14 +1487,21 @@ def somatic_calling(args):
         hap_g_command += ' --show_ref ' if args.print_ref_calls else ''
         hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
         hap_g_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
-        hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/4_HAP_FILTER_SNV.log'
+        hap_g_command += ' --haplotype_filtering_chunk_mode ' + str(args.haplotype_filtering_chunk_mode)
+        hap_g_command += ' --haplotype_chunk_max_sites ' + str(args.haplotype_chunk_max_sites)
+        hap_g_command += ' --haplotype_chunk_max_span ' + str(args.haplotype_chunk_max_span)
+        if args.haplotype_input_filter_tag is not None:
+            hap_g_command += ' --input_filter_tag ' + shlex.quote(args.haplotype_input_filter_tag)
+        if args.ctg_name is not None:
+            hap_g_command += ' --ctg_name ' + args.ctg_name + ' '
+        hap_g_command += ' ) 2>&1 | tee ' + args.work_logs + '/4_HAP_FILTER_SNV.log'
         commands_list += [hap_g_command]
+        snv_pileup_for_postprocess = snv_filtered_vcf
 
-    # STEP 5: SNV VCF POST-PROCESSING
     echo_list.append("[INFO] STEP 5: SNV VCF Post-processing")
     postprocess_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
     postprocess_vcf_command += ' --ref_fn ' + args.ref_fn
-    postprocess_vcf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup_filtering.vcf'
+    postprocess_vcf_command += ' --pileup_vcf_fn ' + snv_pileup_for_postprocess
     postprocess_vcf_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.snv_output_prefix)
     postprocess_vcf_command += ' --platform ' + args.platform
     postprocess_vcf_command += ' --qual ' + str(args.qual)
@@ -1446,11 +1510,10 @@ def somatic_calling(args):
     postprocess_vcf_command += ' --af ' + str(args.snv_min_af)
     postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
     postprocess_vcf_command += ' --disable_indel_calling True'
-    postprocess_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
-    postprocess_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/5_PV_SNV.log'
+    postprocess_vcf_command += ' --cmdline ' + args.work_tmp + '/CMD'
+    postprocess_vcf_command += ' ) 2>&1 | tee ' + args.work_logs + '/5_PV_SNV.log'
     commands_list += [postprocess_vcf_command]
 
-    # ADD REFERENCE CALLs for SNV Calling
     if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
         echo_list.append("[INFO] Add Reference Calls to the VCF Output for SNV Calling")
         genotyping_command = args.pypy + ' ' + main_entry + ' add_back_missing_variants_in_genotyping'
@@ -1458,8 +1521,8 @@ def somatic_calling(args):
         genotyping_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
         genotyping_command += ' --call_fn ' + args.output_dir + '/{}.vcf.gz'.format(args.snv_output_prefix)
         genotyping_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.snv_output_prefix)
-        genotyping_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
-        genotyping_command += ' 2>&1 | tee ' + args.output_dir + '/logs/6_GT.log'
+        genotyping_command += ' --candidates_folder ' + args.work_tmp + '/candidates'
+        genotyping_command += ' 2>&1 | tee ' + args.work_logs + '/6_GT.log'
         commands_list += [genotyping_command]
 
     if not args.disable_verdict:
@@ -1472,25 +1535,24 @@ def somatic_calling(args):
         cna_germline_tagging_command += ' --cna_resource_dir ' + str(args.cna_resource_dir)
         cna_germline_tagging_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(
             args.snv_output_prefix)
-        cna_germline_tagging_command += ' --output_dir ' + args.output_dir + '/tmp/cna_output'
+        cna_germline_tagging_command += ' --output_dir ' + args.work_tmp + '/cna_output'
         cna_germline_tagging_command += ' --parallel ' + args.parallel
         cna_germline_tagging_command += ' --python ' + args.python
-        cna_germline_tagging_command += ' --contig_fn ' + args.output_dir + '/tmp/CONTIGS'
+        cna_germline_tagging_command += ' --contig_fn ' + args.work_tmp + '/CONTIGS'
         cna_germline_tagging_command += ' --threads ' + str(args.threads)
         cna_germline_tagging_command += ' --platform ' + args.platform
-        cna_germline_tagging_command += ' 2>&1 | tee ' + args.output_dir + '/logs/6_CGT.log'
+        cna_germline_tagging_command += ' 2>&1 | tee ' + args.work_logs + '/6_CGT.log'
         commands_list += [cna_germline_tagging_command]
 
     if not args.disable_indel_calling:
-        # STEP 6: CREATE INDEL PILEUP TENSOR
         echo_list.append("[INFO] STEP 6: Indel Pileup Model Calling\n")
         echo_list[-1] += ("[INFO] Create Tensors for Indel Pileup Affirmative Model")
         indel_cpt_aff_command = args.pypy + ' ' + main_entry + ' concat_files'
-        indel_cpt_aff_command += ' --input_dir ' + "{}/tmp/candidates".format(args.output_dir)
+        indel_cpt_aff_command += ' --input_dir ' + os.path.join(args.work_tmp, 'candidates')
         indel_cpt_aff_command += ' --input_prefix ' + "INDEL_CANDIDATES_FILE_"
         indel_cpt_aff_command += ' --output_fn INDEL_CANDIDATES_FILES '
         indel_cpt_aff_command += ' && ( ' + time + args.parallel
-        indel_cpt_aff_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-1_create_tensor_affirmative_indel.log'
+        indel_cpt_aff_command += ' --joblog ' + args.work_logs + '/parallel_6-1_create_tensor_affirmative_indel.log'
         indel_cpt_aff_command += ' -j ' + str(args.threads)
         indel_cpt_aff_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
         indel_cpt_aff_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -1501,22 +1563,22 @@ def somatic_calling(args):
         indel_cpt_aff_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
         indel_cpt_aff_command += ' --samtools ' + args.samtools
         indel_cpt_aff_command += ' --candidates_bed_regions {1}'
-        indel_cpt_aff_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
+        indel_cpt_aff_command += ' --tensor_can_fn ' + args.work_tmp + '/pileup_tensor_can_affirmative/{1/} '
         indel_cpt_aff_command += ' --platform ' + args.platform
-        indel_cpt_aff_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
-        indel_cpt_aff_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-1_CPT_Affirmative_INDEL.log'
+        indel_cpt_aff_command += ' :::: ' + args.work_tmp + '/candidates/INDEL_CANDIDATES_FILES'
+        indel_cpt_aff_command += ' ) 2>&1 | tee ' + args.work_logs + '/6-1_CPT_Affirmative_INDEL.log'
         commands_list += [indel_cpt_aff_command]
 
         if args.platform == 'ilmn':
             echo_list.append("[INFO] Create Tensors for Indel Pileup Negational Model")
             indel_cpt_neg_command = "ln -sf {} {}".format(
-                args.output_dir + '/tmp/pileup_tensor_can_affirmative/*_indel',
-                args.output_dir + '/tmp/pileup_tensor_can_negational/')
+                args.work_tmp + '/pileup_tensor_can_affirmative/*_indel',
+                args.work_tmp + '/pileup_tensor_can_negational/')
             commands_list += [indel_cpt_neg_command]
         else:
             echo_list.append("[INFO] Create Tensors for Indel Pileup Negational Model")
             indel_cpt_neg_command = '( ' + time + args.parallel
-            indel_cpt_neg_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-1_create_tensor_negational_indel.log'
+            indel_cpt_neg_command += ' --joblog ' + args.work_logs + '/parallel_6-1_create_tensor_negational_indel.log'
             indel_cpt_neg_command += ' -j ' + str(args.threads)
             indel_cpt_neg_command += ' ' + args.pypy + ' ' + main_entry + ' create_tensor_pileup_calling'
             indel_cpt_neg_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
@@ -1527,21 +1589,20 @@ def somatic_calling(args):
             indel_cpt_neg_command += ' --min_bq 0'
             indel_cpt_neg_command += ' --max_depth {} '.format(str(args.bam_mplp_set_maxcnt)) if args.bam_mplp_set_maxcnt is not None else ""
             indel_cpt_neg_command += ' --max_indel_length {} '.format(str(args.max_indel_length)) if args.max_indel_length is not None else ""
-            indel_cpt_neg_command += ' --tensor_can_fn ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
+            indel_cpt_neg_command += ' --tensor_can_fn ' + args.work_tmp + '/pileup_tensor_can_negational/{1/} '
             indel_cpt_neg_command += ' --platform ' + args.platform
-            indel_cpt_neg_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
-            indel_cpt_neg_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-1_CPT_Negational_INDEL.log'
+            indel_cpt_neg_command += ' :::: ' + args.work_tmp + '/candidates/INDEL_CANDIDATES_FILES'
+            indel_cpt_neg_command += ' ) 2>&1 | tee ' + args.work_logs + '/6-1_CPT_Negational_INDEL.log'
             commands_list += [indel_cpt_neg_command]
 
-        ## PREDICT INDEL
         echo_list.append("[INFO] Indel Pileup Model Prediction along with Affirmative & Negational Model")
         indel_p_predict_command = '( ' + time + args.parallel
-        indel_p_predict_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-2_predict_indel.log'
+        indel_p_predict_command += ' --joblog ' + args.work_logs + '/parallel_6-2_predict_indel.log'
         indel_p_predict_command += ' -j ' + str(args.threads)
         indel_p_predict_command += ' ' + args.python + ' ' + main_entry + ' predict'
-        indel_p_predict_command += ' --tensor_fn_acgt ' + args.output_dir + '/tmp/pileup_tensor_can_affirmative/{1/} '
-        indel_p_predict_command += ' --tensor_fn_nacgt ' + args.output_dir + '/tmp/pileup_tensor_can_negational/{1/} '
-        indel_p_predict_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
+        indel_p_predict_command += ' --tensor_fn_acgt ' + args.work_tmp + '/pileup_tensor_can_affirmative/{1/} '
+        indel_p_predict_command += ' --tensor_fn_nacgt ' + args.work_tmp + '/pileup_tensor_can_negational/{1/} '
+        indel_p_predict_command += ' --predict_fn ' + args.work_tmp + '/predict/{1/} '
         indel_p_predict_command += ' --chkpnt_fn_acgt ' + args.indel_pileup_affirmative_model_path
         indel_p_predict_command += ' --chkpnt_fn_nacgt ' + args.indel_pileup_negational_model_path
         indel_p_predict_command += ' --use_gpu ' + str(args.use_gpu)
@@ -1550,46 +1611,43 @@ def somatic_calling(args):
         indel_p_predict_command += ' --pileup '
         indel_p_predict_command += ' --disable_indel_calling False '
         indel_p_predict_command += ' --show_ref ' if args.print_ref_calls else ""
-        indel_p_predict_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
-        indel_p_predict_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-2_PREDICT_INDEL.log'
+        indel_p_predict_command += ' :::: ' + args.work_tmp + '/candidates/INDEL_CANDIDATES_FILES'
+        indel_p_predict_command += ' ) 2>&1 | tee ' + args.work_logs + '/6-2_PREDICT_INDEL.log'
         commands_list += [indel_p_predict_command]
 
-        # INDEL CALL VARIANTS
         echo_list.append("[INFO] Indel Pileup Model Calling Variants")
         indel_cv_command = '( ' + time + args.parallel
-        indel_cv_command += ' --joblog ' + args.output_dir + '/logs/parallel_6-3_call_variants_indel.log'
+        indel_cv_command += ' --joblog ' + args.work_logs + '/parallel_6-3_call_variants_indel.log'
         indel_cv_command += ' -j ' + str(args.threads)
         indel_cv_command += ' ' + args.python + ' ' + main_entry + ' call_variants'
-        indel_cv_command += ' --predict_fn ' + args.output_dir + '/tmp/predict/{1/} '
-        indel_cv_command += ' --call_fn ' + args.output_dir + '/tmp/vcf_output/p_{1/}.vcf'
+        indel_cv_command += ' --predict_fn ' + args.work_tmp + '/predict/{1/} '
+        indel_cv_command += ' --call_fn ' + args.work_tmp + '/vcf_output/p_{1/}.vcf'
         indel_cv_command += ' --platform ' + args.platform
         indel_cv_command += ' --likelihood_matrix_data {} '.format(
             args.indel_likelihood_matrix_data) if args.indel_likelihood_matrix_data is not None else ''
         indel_cv_command += ' --disable_indel_calling False '
         indel_cv_command += ' --show_ref ' if args.print_ref_calls else ""
-        indel_cv_command += ' :::: ' + args.output_dir + '/tmp/candidates/INDEL_CANDIDATES_FILES'
-        indel_cv_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/6-3_CALL_VARIANTS_INDEL.log'
+        indel_cv_command += ' :::: ' + args.work_tmp + '/candidates/INDEL_CANDIDATES_FILES'
+        indel_cv_command += ' ) 2>&1 | tee ' + args.work_logs + '/6-3_CALL_VARIANTS_INDEL.log'
         commands_list += [indel_cv_command]
 
-        # MERGE INDEL CALLING VCFs
         echo_list.append("[INFO] Merge Indel VCFs")
         indel_p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
         indel_p_mv_command += ' --ref_fn ' + args.ref_fn
-        indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
-        indel_p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+        indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.work_tmp, 'CONTIGS')
+        indel_p_mv_command += ' --input_dir ' + args.work_tmp + '/vcf_output'
         indel_p_mv_command += ' --vcf_fn_suffix ' + 'indel.vcf'
-        indel_p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup.vcf'
+        indel_p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/indel_pileup.vcf'
         commands_list += [indel_p_mv_command]
 
         if not args.disable_nonsomatic_tagging:
-            # INDEL NON-SOMATIC TAGGING
             echo_list.append("[INFO] STEP 7: Non-somatic Tagging for Indel Variants")
             indel_gf_command = '( ' + time + args.parallel
-            indel_gf_command += ' --joblog ' + args.output_dir + '/logs/parallel_7_nonsomatic_tagging_indel.log'
+            indel_gf_command += ' --joblog ' + args.work_logs + '/parallel_7_nonsomatic_tagging_indel.log'
             indel_gf_command += ' -j ' + str(args.threads)
             indel_gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
-            indel_gf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup.vcf'
-            indel_gf_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_nonsomatic_tagging_{1}.vcf'
+            indel_gf_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/indel_pileup.vcf'
+            indel_gf_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/indel_nonsomatic_tagging_{1}.vcf'
             indel_gf_command += ' --ctg_name {1} '
             indel_gf_command += ' --pypy3 ' + args.pypy
             indel_gf_command += ' --parallel ' + args.parallel
@@ -1599,48 +1657,48 @@ def somatic_calling(args):
                 args.panel_of_normals) if args.panel_of_normals is not None else ''
             indel_gf_command += ' --panel_of_normals_require_allele_matching {} '.format(
                 args.panel_of_normals_require_allele_matching) if args.panel_of_normals_require_allele_matching is not None else ''
-            indel_gf_command += ' :::: ' + args.output_dir + '/tmp/CONTIGS'
-            indel_gf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/7_NONSOMATIC_TAG_INDEL.log'
+            indel_gf_command += ' --skip_pon_md5 ' if args.skip_pon_md5 else ''
+            indel_gf_command += ' :::: ' + args.work_tmp + '/CONTIGS'
+            indel_gf_command += ' ) 2>&1 | tee ' + args.work_logs + '/7_NONSOMATIC_TAG_INDEL.log'
             commands_list += [indel_gf_command]
 
-            # MERGE INDEL NON-SOMATIC TAGGING VCFs
             echo_list.append("[INFO] Merge Indel Non-somatic Tagging VCFs")
             indel_p_mv_command = args.pypy + ' ' + main_entry + ' sort_vcf'
             indel_p_mv_command += ' --ref_fn ' + args.ref_fn
-            indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.output_dir, 'tmp', 'CONTIGS')
-            indel_p_mv_command += ' --input_dir ' + args.output_dir + '/tmp/vcf_output'
+            indel_p_mv_command += ' --contigs_fn ' + os.path.join(args.work_tmp, 'CONTIGS')
+            indel_p_mv_command += ' --input_dir ' + args.work_tmp + '/vcf_output'
             indel_p_mv_command += ' --vcf_fn_prefix ' + 'indel_nonsomatic_tagging_'
-            indel_p_mv_command += ' --output_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
+            indel_p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
             commands_list += [indel_p_mv_command]
         else:
-            # INDEL NON-SOMATIC TAGGING
             echo_list.append("[INFO] STEP 7: Non-somatic Tagging for SNV Variants")
-            indel_nst_command = "ln -sf {} {}".format(args.output_dir + '/tmp/vcf_output/indel_pileup.vcf',
-                                                      args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf')
+            indel_nst_command = "ln -sf {} {}".format(args.work_tmp + '/vcf_output/indel_pileup.vcf',
+                                                      args.work_tmp + '/vcf_output/indel_pileup_nonsomatic_tagging.vcf')
             commands_list += [indel_nst_command]
 
-        if args.platform == 'ilmn':
-            # SHORT-READ REALIGNMENT for Indel Variants
+        indel_nonsomatic_vcf = args.work_tmp + '/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
+        indel_filtered_vcf = args.work_tmp + '/vcf_output/indel_pileup_filtering.vcf'
+        if _is_ilmn_family_platform(args.platform):
             echo_list.append("[INFO] STEP 8: Short-read Realignment for Indel Variants")
             indel_realign_command = '( ' + time + args.python + ' ' + main_entry + ' realign_variants'
             indel_realign_command += ' --bam_fn ' + args.tumor_bam_fn
             indel_realign_command += ' --ref_fn ' + args.ref_fn
-            indel_realign_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
-            indel_realign_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_realignment.vcf'
+            indel_realign_command += ' --pileup_vcf_fn ' + indel_nonsomatic_vcf
+            indel_realign_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/indel_pileup_realignment.vcf'
             indel_realign_command += ' --samtools ' + args.samtools
             indel_realign_command += ' --python ' + args.python
             indel_realign_command += ' --threads ' + str(args.threads)
             indel_realign_command += ' --show_ref ' if args.print_ref_calls else ''
             indel_realign_command += ' --is_indel '
             indel_realign_command += ' --enable_realignment ' + str(args.enable_realignment)
-            indel_realign_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8-1_REALIGN_INDEL.log'
+            indel_realign_command += ' ) 2>&1 | tee ' + args.work_logs + '/8-1_REALIGN_INDEL.log'
 
             indel_postfilter_command = '( ' + time + args.pypy + ' ' + main_entry + ' postfilter_variants'
             indel_postfilter_command += ' --tumor_bam_fn ' + args.tumor_bam_fn
             indel_postfilter_command += ' --ref_fn ' + args.ref_fn
-            indel_postfilter_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_realignment.vcf'
-            indel_postfilter_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
-            indel_postfilter_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_postfilter_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/indel_pileup_realignment.vcf'
+            indel_postfilter_command += ' --output_dir ' + args.work_tmp + '/vcf_output'
+            indel_postfilter_command += ' --output_vcf_fn ' + indel_filtered_vcf
             indel_postfilter_command += ' --samtools ' + args.samtools
             indel_postfilter_command += ' --pypy3 ' + args.pypy
             indel_postfilter_command += ' --parallel ' + args.parallel
@@ -1650,19 +1708,24 @@ def somatic_calling(args):
             indel_postfilter_command += ' --is_indel '
             indel_postfilter_command += ' --enable_postfilter ' + str(args.enable_postfilter)
             indel_postfilter_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
-            indel_postfilter_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8-2_POSTFILTER_INDEL.log'
+            indel_postfilter_command += ' --postfilter_variants_chunk_mode ' + str(args.postfilter_variants_chunk_mode)
+            indel_postfilter_command += ' ) 2>&1 | tee ' + args.work_logs + '/8-2_POSTFILTER_INDEL.log'
 
             commands_list += [indel_realign_command + ' && ' + indel_postfilter_command]
+            indel_pileup_for_postprocess = indel_filtered_vcf
+        elif args.disable_intermediate_phasing:
+            echo_list.append(
+                "[INFO] STEP 8: Skipped (Indel haplotype filtering; --disable_intermediate_phasing)")
+            indel_pileup_for_postprocess = indel_nonsomatic_vcf
         else:
-            # INDEL HAPLOTYPE FILTERING
             echo_list.append("[INFO] STEP 8: Post Filtering for Indel Variants")
             indel_hap_g_command = '( ' + time + args.pypy + ' ' + main_entry + ' haplotype_filtering'
             indel_hap_g_command += ' --tumor_bam_fn ' + tumor_bam_prefix
             indel_hap_g_command += ' --ref_fn ' + args.ref_fn
-            indel_hap_g_command += ' --germline_vcf_fn ' + args.output_dir + '/tmp/vcf_output/snv_pileup.vcf'
-            indel_hap_g_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
-            indel_hap_g_command += ' --output_dir ' + args.output_dir + '/tmp/vcf_output'
-            indel_hap_g_command += ' --output_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+            indel_hap_g_command += ' --germline_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
+            indel_hap_g_command += ' --pileup_vcf_fn ' + indel_nonsomatic_vcf
+            indel_hap_g_command += ' --output_dir ' + args.work_tmp + '/vcf_output'
+            indel_hap_g_command += ' --output_vcf_fn ' + indel_filtered_vcf
             indel_hap_g_command += ' --samtools ' + args.samtools
             indel_hap_g_command += ' --pypy3 ' + args.pypy
             indel_hap_g_command += ' --parallel ' + args.parallel
@@ -1672,14 +1735,21 @@ def somatic_calling(args):
             indel_hap_g_command += ' --is_indel '
             indel_hap_g_command += ' --apply_haplotype_filtering ' + str(args.apply_haplotype_filtering)
             indel_hap_g_command += ' --disable_read_start_end_filtering ' + str(args.disable_read_start_end_filtering)
-            indel_hap_g_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/8_HAP_FILTER_INDEL.log'
+            indel_hap_g_command += ' --haplotype_filtering_chunk_mode ' + str(args.haplotype_filtering_chunk_mode)
+            indel_hap_g_command += ' --haplotype_chunk_max_sites ' + str(args.haplotype_chunk_max_sites)
+            indel_hap_g_command += ' --haplotype_chunk_max_span ' + str(args.haplotype_chunk_max_span)
+            if args.haplotype_input_filter_tag is not None:
+                indel_hap_g_command += ' --input_filter_tag ' + shlex.quote(args.haplotype_input_filter_tag)
+            if args.ctg_name is not None:
+                indel_hap_g_command += ' --ctg_name ' + args.ctg_name + ' '
+            indel_hap_g_command += ' ) 2>&1 | tee ' + args.work_logs + '/8_HAP_FILTER_INDEL.log'
             commands_list += [indel_hap_g_command]
+            indel_pileup_for_postprocess = indel_filtered_vcf
 
-        # INDEL VCF POST-PROCESSING
         echo_list.append("[INFO] STEP 9: Indel VCF Post-processing")
         indel_postprocess_vcf_command = '( ' + time + args.pypy + ' ' + main_entry + ' postprocess_vcf'
         indel_postprocess_vcf_command += ' --ref_fn ' + args.ref_fn
-        indel_postprocess_vcf_command += ' --pileup_vcf_fn ' + args.output_dir + '/tmp/vcf_output/indel_pileup_filtering.vcf'
+        indel_postprocess_vcf_command += ' --pileup_vcf_fn ' + indel_pileup_for_postprocess
         indel_postprocess_vcf_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.indel_output_prefix)
         indel_postprocess_vcf_command += ' --platform ' + args.platform
         indel_postprocess_vcf_command += ' --qual ' + str(args.qual_indel)
@@ -1689,11 +1759,10 @@ def somatic_calling(args):
         indel_postprocess_vcf_command += ' --sample_name ' + str(args.sample_name)
         indel_postprocess_vcf_command += ' --disable_indel_calling False'
         indel_postprocess_vcf_command += ' --indel_calling '
-        indel_postprocess_vcf_command += ' --cmdline ' + args.output_dir + '/tmp/CMD'
-        indel_postprocess_vcf_command += ' ) 2>&1 | tee ' + args.output_dir + '/logs/9_PV_INDEL.log'
+        indel_postprocess_vcf_command += ' --cmdline ' + args.work_tmp + '/CMD'
+        indel_postprocess_vcf_command += ' ) 2>&1 | tee ' + args.work_logs + '/9_PV_INDEL.log'
         commands_list += [indel_postprocess_vcf_command]
 
-        # ADD REFERENCE CALLs for Indel Calling
         if args.genotyping_mode_vcf_fn is not None or args.hybrid_mode_vcf_fn is not None:
             echo_list.append("[INFO] Add Reference Calls to the VCF Output for Indel Calling")
             indel_genotyping_command = args.pypy + ' ' + main_entry + ' add_back_missing_variants_in_genotyping'
@@ -1701,8 +1770,8 @@ def somatic_calling(args):
             indel_genotyping_command += ' --hybrid_mode_vcf_fn ' + str(args.hybrid_mode_vcf_fn)
             indel_genotyping_command += ' --call_fn ' + args.output_dir + '/{}.vcf.gz'.format(args.indel_output_prefix)
             indel_genotyping_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(args.indel_output_prefix)
-            indel_genotyping_command += ' --candidates_folder ' + args.output_dir + '/tmp/candidates'
-            indel_genotyping_command += ' 2>&1 | tee ' + args.output_dir + '/logs/10_GT_INDEL.log'
+            indel_genotyping_command += ' --candidates_folder ' + args.work_tmp + '/candidates'
+            indel_genotyping_command += ' 2>&1 | tee ' + args.work_logs + '/10_GT_INDEL.log'
             commands_list += [indel_genotyping_command]
 
         if not args.disable_verdict:
@@ -1715,18 +1784,17 @@ def somatic_calling(args):
             indel_cna_germline_tagging_command += ' --cna_resource_dir ' + str(args.cna_resource_dir)
             indel_cna_germline_tagging_command += ' --output_fn ' + args.output_dir + '/{}.vcf'.format(
                 args.indel_output_prefix)
-            indel_cna_germline_tagging_command += ' --output_dir ' + args.output_dir + '/tmp/cna_output'
+            indel_cna_germline_tagging_command += ' --output_dir ' + args.work_tmp + '/cna_output'
             indel_cna_germline_tagging_command += ' --parallel ' + args.parallel
             indel_cna_germline_tagging_command += ' --python ' + args.python
-            indel_cna_germline_tagging_command += ' --contig_fn ' + args.output_dir + '/tmp/CONTIGS'
+            indel_cna_germline_tagging_command += ' --contig_fn ' + args.work_tmp + '/CONTIGS'
             indel_cna_germline_tagging_command += ' --threads ' + str(args.threads)
             indel_cna_germline_tagging_command += ' --platform ' + args.platform
             indel_cna_germline_tagging_command += ' --is_indel '
-            indel_cna_germline_tagging_command += ' 2>&1 | tee ' + args.output_dir + '/logs/10_CGT_INDEL.log'
+            indel_cna_germline_tagging_command += ' 2>&1 | tee ' + args.work_logs + '/10_CGT_INDEL.log'
             commands_list += [indel_cna_germline_tagging_command]
 
     def run_command_with_parallel_check(command, step_num, step_desc="", stdout=None):
-        # Use bash with pipefail so that failures in pipelines (e.g. cmd | tee) propagate correctly
         use_pipefail = "| tee" in command or "|" in command
         run_cmd = ["bash", "-o", "pipefail", "-c", command] if use_pipefail else command
         step_label = "STEP {} ({})".format(step_num, step_desc) if step_desc else "STEP {}".format(step_num)
@@ -1743,8 +1811,6 @@ def somatic_calling(args):
         rc = result.returncode
         if rc != 0:
             cmd_snip = command[:200] + ("..." if len(command) > 200 else "")
-            # 128+SIGKILL / 128+SIGABRT when a shell reports signaled children; negative rc = -signal (POSIX direct child)
-            # Strong heuristic only; many OOMs still exit with 1 — check step logs.
             oom_like = rc in (137, 134, -9, -6)
             extra = (
                 "\n[ERROR] This exit code often indicates SIGKILL or SIGABRT (e.g. Linux OOM killer or abort). "
@@ -1758,8 +1824,6 @@ def somatic_calling(args):
             sys.exit(1)
         return rc
 
-    # EXECUTE COMMANDS STEP BY STEP
-    # Build step_numbers: match echo's "STEP N" so error messages show correct step
     step_numbers = []
     last_step = 1
     for echo in echo_list:
@@ -1769,7 +1833,6 @@ def somatic_calling(args):
         step_numbers.append(last_step)
 
     def step_desc_from_echo(echo):
-        # Extract description after "STEP N: " e.g. "Non-somatic Tagging for SNV Variants"
         m = re.search(r'STEP \d+:\s*(.+?)(?:\n|$)', echo)
         return m.group(1).strip() if m else ""
 
@@ -1792,15 +1855,14 @@ def somatic_calling(args):
         logging("")
 
     if args.remove_intermediate_dir:
-        logging("[INFO] Removing intermediate files in {}/tmp ...".format(args.output_dir))
-        subprocess.run('rm -rf {}/tmp'.format(args.output_dir), shell=True)
+        logging("[INFO] Removing intermediate files in {} ...".format(args.work_tmp))
+        subprocess.run('rm -rf {}'.format(args.work_tmp), shell=True)
 
 
 def somatic_parser():
     parser = argparse.ArgumentParser(
         description="Run ClairS-TO for tumor-only somatic variant calling. Example run: run_clairs_to -T TUMOR_BAM -R REF -o OUTPUT_DIR -t THREADS -p PLATFORM")
 
-    # print version
     parser.add_argument('-v', '--version', action='version',
                         version='%(prog)s {}'.format(param.version))
 
@@ -1857,7 +1919,7 @@ def somatic_parser():
         "--sample_name",
         type=str,
         default="SAMPLE",
-        help="Define the sample name to be shown in the VCF file. Default: SAMPLE."
+        help="Define the sample name to be shown in the VCF file. Default: SAMPLE. If set to a non-default name, intermediate directories tmp_* and logs_* under --output_dir include a sanitized tag; default --snv_output_prefix/--indel_output_prefix become snv_<tag> and indel_<tag> so final VCFs in --output_dir do not overwrite across samples. Explicit output prefixes are left unchanged."
     )
 
     optional_params.add_argument(
@@ -1932,7 +1994,6 @@ def somatic_parser():
         help="Minimal Indel AF required for a variant to be called. Default: 0.1."
     )
 
-    ## Minimum base quality
     optional_params.add_argument(
         "--min_bq",
         type=int,
@@ -2022,14 +2083,14 @@ def somatic_parser():
         "--snv_output_prefix",
         type=str,
         default="snv",
-        help="Prefix for SNV output VCF filename. Default: snv."
+        help="Prefix for SNV output VCF filename. Default: snv. If --sample_name is not SAMPLE and this is still the default, it becomes snv_<sanitized_sample> so multiple samples can share one --output_dir."
     )
 
     optional_params.add_argument(
         "--indel_output_prefix",
         type=str,
         default="indel",
-        help="Prefix for Indel output VCF filename. Default: indel."
+        help="Prefix for Indel output VCF filename. Default: indel. If --sample_name is not SAMPLE and this is still the default, it becomes indel_<sanitized_sample>."
     )
 
     optional_params.add_argument(
@@ -2043,6 +2104,12 @@ def somatic_parser():
         "--do_not_print_nonsomatic_calls",
         action='store_true',
         help="Do not print those non-somatic variants tagged by `--panel_of_normals`."
+    )
+
+    optional_params.add_argument(
+        "--skip_pon_md5",
+        action='store_true',
+        help="Skip PoN file MD5 in non-somatic tagging (header uses md5=skipped). Saves a full sequential read per PoN with tabix; reduces I/O for very large PoNs. Forwarded to `nonsomatic_tagging`."
     )
 
     other_params = parser.add_argument_group('Other parameters')
@@ -2168,7 +2235,7 @@ def somatic_parser():
     other_params.add_argument(
         "--disable_intermediate_phasing",
         action='store_true',
-        help="Disable intermediate phasing, runs faster but reduces precision."
+        help="Disable intermediate phasing/haplotagging on long-read platforms, and skip SNV/Indel haplotype_filtering (STEP 4/8). Illumina (ilmn) still runs short-read realign_variants + postfilter_variants. When skipped, postprocess_vcf reads the non-somatic-tagged pileup. Runs faster on long reads but reduces precision."
     )
 
     other_params.add_argument(
@@ -2184,7 +2251,6 @@ def somatic_parser():
         help="Disable non-somatic variants tagging and ignore `--panel_of_normals`."
     )
 
-    ##Apply realignment for short-read data
     other_params.add_argument(
         "--enable_realignment",
         type=str2bool,
@@ -2192,7 +2258,6 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    ##Apply postfiltering for short-read data
     other_params.add_argument(
         "--enable_postfilter",
         type=str2bool,
@@ -2200,7 +2265,13 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    ##Apply haplotype filtering for long-read data
+    other_params.add_argument(
+        "--postfilter_variants_chunk_mode",
+        type=str2bool,
+        default=False,
+        help=SUPPRESS
+    )
+
     other_params.add_argument(
         "--apply_haplotype_filtering",
         type=str2bool,
@@ -2216,12 +2287,39 @@ def somatic_parser():
     )
 
     other_params.add_argument(
+        "--haplotype_filtering_chunk_mode",
+        type=str2bool,
+        default=False,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        "--haplotype_chunk_max_sites",
+        type=int,
+        default=DEFAULT_HAPLOTYPE_CHUNK_CANDIDATES_PER_MPILEUP,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        "--haplotype_chunk_max_span",
+        type=int,
+        default=DEFAULT_HAPLOTYPE_CHUNK_MAX_SPAN_BP,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        "--haplotype_input_filter_tag",
+        type=str_none,
+        default=None,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
         "--disable_verdict",
         action='store_true',
         help="Disable using verdict to tag the variants in CNA regions. We suggest using the parameter only for sample with tumor purity estimation lower than 0.6. Default: enabled."
     )
 
-    ## Phase tumor BAM in calling
     other_params.add_argument(
         "--phase_tumor",
         type=str2bool,
@@ -2229,22 +2327,18 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    # options for internal process control
-    ## Prefer maximized recall
     other_params.add_argument(
         "--prefer_recall",
         action='store_true',
         help=SUPPRESS
     )
 
-    ## Prefer balance between precision and recall
     other_params.add_argument(
         "--prefer_balance",
         action='store_true',
         help=SUPPRESS
     )
 
-    ##If set then will use GPUs for inference. CUDA required
     other_params.add_argument(
         "-g",
         "--use_gpu",
@@ -2252,7 +2346,6 @@ def somatic_parser():
         help=SUPPRESS
     )
 
-    ##List of (ctg_name, chunk_id, chunk_num)
     other_params.add_argument(
         "--chunk_list",
         type=str,
@@ -2327,10 +2420,6 @@ def somatic_parser():
 
 
 def main():
-    """
-    Main interface for ClairS-TO.
-    """
-
     global args
 
     call_start_time = time()
@@ -2339,7 +2428,7 @@ def main():
     args = parser.parse_args()
 
     args.output_dir = folder_path_from(args.output_dir, create_not_found=True)
-    tee_logger = os.path.join(args.output_dir, 'run_clairs_to.log' if not args.dry_run else "run_clairs_to_dry_run.log")
+    tee_logger = os.path.join(args.output_dir, _run_clairs_to_log_basename(args.sample_name, args.dry_run))
     if os.path.exists(tee_logger):
         subprocess.run("mv {} {}".format(tee_logger, tee_logger + '.bak'), shell=True)
     try:
@@ -2351,8 +2440,8 @@ def main():
     logging("")
 
     try:
-        args = print_command_line(args)
         args = check_args(args)
+        args = print_command_line(args)
         args = print_args(args)
         somatic_calling(args)
 
@@ -2369,12 +2458,12 @@ def main():
 
     except MemoryError:
         sys.stderr.write("\n[ERROR] Out of memory (OOM). Program terminated.\n")
-        sys.stderr.write("[ERROR] Consider: increasing RAM, using --ctg_name for per-contig runs, or --disable_nonsomatic_tagging.\n")
+        sys.stderr.write("[ERROR] Consider: increasing RAM, --skip_pon_md5 for large PoNs, per-contig runs, or --disable_nonsomatic_tagging.\n")
         sys.exit(1)
     except OSError as e:
         if 'Cannot allocate memory' in str(e) or 'errno 12' in str(e):
             sys.stderr.write("\n[ERROR] Out of memory (OOM): {}\n".format(e))
-            sys.stderr.write("[ERROR] Consider: increasing RAM, using --ctg_name for per-contig runs.\n")
+            sys.stderr.write("[ERROR] Consider: increasing RAM, --skip_pon_md5, or per-contig runs.\n")
             sys.exit(1)
         raise
     except (KeyboardInterrupt, SystemExit):
