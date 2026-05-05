@@ -223,6 +223,17 @@ class VcfReader(object):
         self.min_qual = min_qual
         self.max_qual = max_qual
         self.keep_af = keep_af
+        # Single chrom: filter exact chrom; variant_dict keys are int positions only (legacy).
+        # Multi chrom (comma-separated or ctg None): filter chrom in set; keys are (chrom, pos).
+        if ctg_name is None:
+            self._ctg_filter_set = None
+            self._use_tuple_variant_keys = True
+        elif ',' in ctg_name:
+            self._ctg_filter_set = frozenset(x.strip() for x in ctg_name.split(',') if x.strip())
+            self._use_tuple_variant_keys = True
+        else:
+            self._ctg_filter_set = frozenset([ctg_name])
+            self._use_tuple_variant_keys = False
 
     def read_vcf(self):
         is_ctg_region_provided = self.ctg_start is not None and self.ctg_end is not None
@@ -249,7 +260,7 @@ class VcfReader(object):
                 -1].rstrip().lower() == "tumor" else False
             # position in vcf is 1-based
             chromosome, position = columns[0], columns[1]
-            if self.ctg_name is not None and chromosome != self.ctg_name:
+            if self._ctg_filter_set is not None and chromosome not in self._ctg_filter_set:
                 continue
             if is_ctg_region_provided and not (self.ctg_start <= int(position) <= self.ctg_end):
                 continue
@@ -326,7 +337,7 @@ class VcfReader(object):
                 continue
             extra_infos = columns[-1].split(':')[-1] if have_extra_infos else ''
             row_str = row if self.keep_row_str else False
-            key = (chromosome, position) if self.ctg_name is None else position
+            key = (chromosome, position) if self._use_tuple_variant_keys else position
 
             self.variant_dict[key] = Position(ctg_name=chromosome,
                                               pos=position,
