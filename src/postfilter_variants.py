@@ -1,8 +1,7 @@
 import os
 import shlex
-import gc
 import subprocess
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 
 from collections import Counter
 from argparse import ArgumentParser, SUPPRESS
@@ -91,13 +90,6 @@ def fisher_exact(table):
 
 
 def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
-    """
-    We use a kmer-based sequence entropy calculation to measure the complexity of a region.
-    sequence: a chunked sequence around a candidate position, default no_of_positions = flankingBaseNum + 1 + flankingBaseNum
-    entropy_window: a maximum entropy window for scanning, if the sequence is larger than the entropy window, a slide
-    window would be adopted for measurement.
-    kmer: default kmer size for sequence entropy calculation.
-    """
 
     count_repeat_kmer_counts = [0] * (entropy_window + 2)
     count_repeat_kmer_counts[0] = entropy_window
@@ -109,7 +101,7 @@ def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
     entropy_mul = -1 / math.log(entropy_window)
     entropy_kmer_space = 1 << (2 * kmer)
 
-    kmer_hash_counts = [0] * entropy_kmer_space  # value should smaller than len(seq)
+    kmer_hash_counts = [0] * entropy_kmer_space
     mask = -1 if kmer > 15 else ~((-1) << (2 * kmer))
     kmer_suffix, kmer_prefix = 0, 0
 
@@ -131,7 +123,7 @@ def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
 
         if i2 >= 0 and i < len(sequence):
             n2 = BASE2NUM[sequence[i2]]
-            kmer_prefix = ((kmer_prefix << 2) | n2) & mask  # add base info
+            kmer_prefix = ((kmer_prefix << 2) | n2) & mask
             count_repeat_kmer_counts[kmer_hash_counts[kmer_prefix]] -= 1
             entropy_sum -= entropy[kmer_hash_counts[kmer_prefix]]
             kmer_hash_counts[kmer_prefix] -= 1
@@ -144,14 +136,6 @@ def calculate_sequence_entropy(sequence, entropy_window=None, kmer=5):
 
 
 def sqeuence_entropy_from(reference_sequence):
-    """
-    Calculate sequence entropy in a specific candidate windows, variants in low sequence entropy regions (low
-    mappability regions, such as homopolymer, tandem repeat, segmental duplications regions) would more likely have
-    more complex variants representation, which is beyond pileup calling. Hence, those candidate variants are re-called by
-    full alignment calling.
-    We use a kmer-based sequence entropy calculation to measure the complexity of a region, we would directly query the
-    chunked reference sequence for sequence entropy calculation for each candidate variant.
-    """
 
     entropy_window = param.no_of_positions
     ref_seq = reference_sequence[flanking - param.flankingBaseNum : flanking + param.flankingBaseNum + 1]
@@ -179,15 +163,14 @@ def get_base_list(columns):
                     base_idx += 1
                 else:
                     break
-            base_list[-1][1] = base + pileup_bases[base_idx: base_idx + advance]  # add indel seq
+            base_list[-1][1] = base + pileup_bases[base_idx: base_idx + advance]
             base_idx += advance - 1
 
         elif base in "ACGTNacgtn#*":
             base_list.append([base, ""])
-        elif base == '^':  # start of read, next base is mq, update mq info
+        elif base == '^':
             base_idx += 1
             read_start_set.add(len(base_list) - 1)
-        # skip $, the end of read
         if base == "$":
             read_end_set.add(len(base_list) - 1)
         base_idx += 1
@@ -196,119 +179,116 @@ def get_base_list(columns):
     return upper_base_counter, base_list, read_start_end_set
 
 
-def postfilter_per_pos(args):
-    pos = args.pos
-    ctg_name = args.ctg_name
-    ref_base = args.ref_base
-    alt_base = args.alt_base
-    tumor_bam_fn = args.tumor_bam_fn
-    ref_fn = args.ref_fn
-    samtools = args.samtools
-    min_bq = args.min_bq
-    min_mq = args.min_mq
-    max_co_exist_read_num = args.min_alt_coverage
+DEFAULT_POSTFILTER_CHUNK_MAX_SITES = 256
+DEFAULT_POSTFILTER_CHUNK_MAX_SPAN = 50000
+MIN_FANOUT_SITES_PER_MPILEUP_SHARD = 8
+
+
+def _fanout_chunk_jobs_for_parallelism(chunk_jobs, threads_low, flanking):
+    if threads_low <= 1 or not chunk_jobs:
+        return chunk_jobs
+    jobs = [(c, tuple(sorted(b)), lo, hi) for c, b, lo, hi in chunk_jobs]
+    min_piece = MIN_FANOUT_SITES_PER_MPILEUP_SHARD
+    safety = 0
+    while len(jobs) < threads_low and safety < threads_low * 16:
+        safety += 1
+        idx = max(range(len(jobs)), key=lambda i: len(jobs[i][1]))
+        contig, bs, _, _ = jobs[idx]
+        n = len(bs)
+        if n < 2 * min_piece:
+            break
+        mid = n // 2
+        left, right = bs[:mid], bs[mid:]
+        repl = []
+        for sub in (left, right):
+            slo = max(min(sub) - flanking, 1)
+            shi = max(sub) + flanking + 1
+            repl.append((contig, sub, slo, shi))
+        jobs = jobs[:idx] + repl + jobs[idx + 1:]
+    return jobs
+
+
+def _group_postfilter_chunk_positions(sorted_positions, flanking, max_sites, max_span):
+    groups = []
+    n = len(sorted_positions)
+    if n == 0:
+        return groups
+    max_sites = max(1, int(max_sites))
+    max_span = max(1, int(max_span))
+    i = 0
+    while i < n:
+        j = i
+        lo = sorted_positions[i] - flanking
+        hi = sorted_positions[i] + flanking
+        while j + 1 < n:
+            nlo = min(lo, sorted_positions[j + 1] - flanking)
+            nhi = max(hi, sorted_positions[j + 1] + flanking)
+            span = nhi - max(nlo, 1)
+            if (j - i + 2) > max_sites or span > max_span:
+                break
+            lo, hi = nlo, nhi
+            j += 1
+        batch = sorted_positions[i : j + 1]
+        reg_lo = max(lo, 1)
+        reg_hi = hi + 1
+        groups.append((batch, reg_lo, reg_hi))
+        i = j + 1
+    return groups
+
+
+def _parse_mpileup_postfilter_chunk_dict(mpileup_stdout):
+    chunk_rows = {}
+    for row in mpileup_stdout:
+        columns = row.split('\t')
+        if len(columns) < 8:
+            continue
+        read_name_list = columns[7].split(',')
+        base_counter, base_list, read_start_end_set = get_base_list(columns)
+        for b_idx, base in enumerate(base_list):
+            if base[0] == '#' or (base[0] >= 'a' and base[0] <= 'z'):
+                read_name_list[b_idx] += '_1'
+            else:
+                read_name_list[b_idx] += '_0'
+        base_list = [[''.join(item[0]).upper()] + [item[1]] for item in base_list]
+        p = int(columns[1])
+        chunk_rows[p] = {
+            'read_name_list': read_name_list,
+            'base_list': base_list,
+            'base_counter': base_counter,
+            'read_start_end_set': read_start_end_set,
+        }
+    return chunk_rows
+
+
+def _run_mpileup_postfilter_chunk_dict(tumor_bam_fn, samtools, ctg_name, region_lo, region_hi, min_mq, min_bq):
+    ctg_range = "{}:{}-{}".format(ctg_name, region_lo, region_hi)
+    samtools_command = (
+        "{} mpileup --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME ".format(
+            samtools, min_mq, min_bq, ctg_range)
+    )
+    tumor_cmd = samtools_command + tumor_bam_fn
+    proc = subprocess_popen(shlex.split(tumor_cmd), stderr=subprocess.PIPE)
+    try:
+        return _parse_mpileup_postfilter_chunk_dict(proc.stdout)
+    finally:
+        proc.stdout.close()
+        proc.wait()
+
+
+def _postfilter_finalize_line(
+        ctg_name, pos, ref_base, alt_base, flanking,
+        pos_dict, pos_counter_dict, hap_dict,
+        all_read_start_end_set, alt_base_read_name_set,
+        ALL_HAP_LIST, HAP_LIST, ALL_HAP_FORWARD_LIST, ALL_HAP_REVERSE_LIST,
+        HAP_FORWARD_LIST, HAP_REVERSE_LIST,
+        ref_seq_site, ref_anchor,
+        disable_read_start_end_filtering, max_co_exist_read_num):
     is_snp = len(ref_base) == 1 and len(alt_base) == 1
-    is_ins = len(ref_base) == 1 and len(alt_base) > 1
-    is_del = len(ref_base) > 1 and len(alt_base) == 1
     pass_read_start_end = True
     pass_co_exist = True
     pass_strand_bias = True
     pass_sequence_entropy = True
 
-    args.qual = args.qual if args.qual is not None else 102
-    args.af = args.af if args.af is not None else 1.0
-
-    disable_read_start_end_filtering = args.disable_read_start_end_filtering
-
-    if not os.path.exists(tumor_bam_fn):
-        tumor_bam_fn += ctg_name + '.bam'
-
-    flanking = args.flanking
-
-    ctg_range = "{}:{}-{}".format(ctg_name, pos - flanking, pos + flanking + 1)
-    samtools_command = "{} mpileup  --min-MQ {} --min-BQ {} --excl-flags 2316 -r {} --output-MQ --output-QNAME ".format(
-        samtools, min_mq, min_bq, ctg_range)
-
-    tumor_samtools_command = samtools_command + tumor_bam_fn
-
-    reference_sequence = reference_sequence_from(
-        samtools_execute_command=samtools,
-        fasta_file_path=ref_fn,
-        regions=[ctg_range]
-    )
-
-    # tumor
-    pos_dict = defaultdict(defaultdict)
-    pos_counter_dict = defaultdict(defaultdict)
-    hap_dict = defaultdict(int)
-    all_read_start_end_set = set()
-    ALL_HAP_LIST = [0, 0, 0]
-    HAP_LIST = [0, 0, 0]
-    ALL_HAP_FORWARD_LIST = [0, 0, 0]
-    ALL_HAP_REVERSE_LIST = [0, 0, 0]
-    HAP_FORWARD_LIST = [0, 0, 0]
-    HAP_REVERSE_LIST = [0, 0, 0]
-    alt_base_read_name_set = set()
-
-    samtools_mpileup_tumor_process = subprocess_popen(shlex.split(tumor_samtools_command), stderr=subprocess.PIPE)
-    for row in samtools_mpileup_tumor_process.stdout:
-        columns = row.split('\t')
-
-        read_name_list = columns[7].split(',')
-        base_counter, base_list, read_start_end_set = get_base_list(columns)
-
-        for b_idx, base in enumerate(base_list):
-            if base[0] == '#' or (base[0] >= 'a' and base[0] <= 'z'):
-                read_name_list[b_idx] += '_1'  # reverse
-            else:
-                read_name_list[b_idx] += '_0'  # forward
-
-        base_list = [[''.join(item[0]).upper()] + [item[1]] for item in base_list]
-
-        p = int(columns[1])
-
-        for idx in range(len(read_name_list)):
-            hap_dict[read_name_list[idx]] = 0
-
-        if len(read_start_end_set) >= len(base_list) * eps_rse:
-            all_read_start_end_set = all_read_start_end_set.union(
-                set([read_name_list[r_idx] for r_idx in read_start_end_set]))
-
-        pos_dict[p] = dict(zip(read_name_list, base_list))
-        center_ref_base = reference_sequence[p - pos + flanking]
-
-        if p == pos:
-            for rn in read_name_list:
-                ALL_HAP_LIST[hap_dict[rn]] += 1
-                if rn.endswith('0'):
-                    ALL_HAP_FORWARD_LIST[hap_dict[rn]] += 1
-                elif rn.endswith('1'):
-                    ALL_HAP_REVERSE_LIST[hap_dict[rn]] += 1
-
-            if is_snp:
-                alt_base_read_name_set = set(
-                    [key for key, value in zip(read_name_list, base_list) if ''.join(value) == alt_base])
-            elif is_ins:
-                alt_base_read_name_set = set(
-                    [key for key, value in zip(read_name_list, base_list) if
-                     ''.join(value).replace('+', '').upper() == alt_base and '+' in ''.join(value)])
-            elif is_del:
-                alt_base_read_name_set = set(
-                    [key for key, value in zip(read_name_list, base_list) if
-                     len(ref_base) == len(value[1]) and '-' in value[1]])
-
-            for rn in alt_base_read_name_set:
-                HAP_LIST[hap_dict[rn]] += 1
-                if rn.endswith('0'):
-                    HAP_FORWARD_LIST[hap_dict[rn]] += 1
-                elif rn.endswith('1'):
-                    HAP_REVERSE_LIST[hap_dict[rn]] += 1
-
-        if len(base_counter) == 1 and base_counter[center_ref_base] > 0:
-            continue
-        pos_counter_dict[p] = base_counter
-
-    # near to read start end and have high overlap
     if not disable_read_start_end_filtering:
         if len(all_read_start_end_set.intersection(alt_base_read_name_set)) >= 0.3 * len(alt_base_read_name_set):
             pass_read_start_end = False
@@ -320,7 +300,7 @@ def postfilter_per_pos(args):
     alt_base_dict = defaultdict(int)
 
     for p, rb_dict in pos_dict.items():
-        rb = reference_sequence[p - pos + flanking]
+        rb = ref_seq_site[p - ref_anchor]
         read_alt_dict = pos_dict[p]
         if p == pos:
             continue
@@ -353,7 +333,8 @@ def postfilter_per_pos(args):
                 alt_base_counter[0][1] <= len(alt_base_read_name_set) * lower_bound):
             continue
 
-        # cal all alt count in current position
+        if p not in pos_counter_dict:
+            continue
         if pos_counter_dict[p][alt_base_counter[0][0]] >= alt_base_counter[0][1] * upper_bound:
             continue
 
@@ -374,14 +355,132 @@ def postfilter_per_pos(args):
         pass_strand_bias = False
 
     if not is_snp:
-        candidate_sequence_entropy = sqeuence_entropy_from(reference_sequence=reference_sequence)
+        candidate_sequence_entropy = sqeuence_entropy_from(reference_sequence=ref_seq_site)
         if candidate_sequence_entropy < sequence_entropy_threshold:
             pass_sequence_entropy = False
 
     pass_hard_filter = (pass_read_start_end and pass_co_exist and pass_strand_bias and pass_sequence_entropy)
 
-    print(' '.join([ctg_name, str(pos), str(pass_hard_filter), str(pass_read_start_end), str(pass_co_exist),
-                    str(pass_strand_bias), str(round(p_value, 5)), str(pass_sequence_entropy)]))
+    return ' '.join([ctg_name, str(pos), str(pass_hard_filter), str(pass_read_start_end), str(pass_co_exist),
+                     str(pass_strand_bias), str(round(p_value, 5)), str(pass_sequence_entropy)])
+
+
+def _postfilter_build_state_and_line(
+        ctg_name, pos, ref_base, alt_base, flanking,
+        chunk_rows, chunk_ref, region_lo,
+        disable_read_start_end_filtering, max_co_exist_read_num):
+    is_snp = len(ref_base) == 1 and len(alt_base) == 1
+    is_ins = len(ref_base) == 1 and len(alt_base) > 1
+    is_del = len(ref_base) > 1 and len(alt_base) == 1
+
+    ref_anchor = max(pos - flanking, 1)
+    ref_end = pos + flanking + 1
+    i0 = ref_anchor - region_lo
+    i1 = ref_end - region_lo + 1
+    ref_seq_site = chunk_ref[i0:i1]
+
+    win_lo = max(pos - flanking, 1)
+    win_hi = pos + flanking
+
+    pos_dict = defaultdict(dict)
+    pos_counter_dict = defaultdict(Counter)
+    hap_dict = defaultdict(int)
+    all_read_start_end_set = set()
+    ALL_HAP_LIST = [0, 0, 0]
+    HAP_LIST = [0, 0, 0]
+    ALL_HAP_FORWARD_LIST = [0, 0, 0]
+    ALL_HAP_REVERSE_LIST = [0, 0, 0]
+    HAP_FORWARD_LIST = [0, 0, 0]
+    HAP_REVERSE_LIST = [0, 0, 0]
+    alt_base_read_name_set = set()
+
+    for p in range(win_lo, win_hi + 1):
+        if p not in chunk_rows:
+            continue
+        rec = chunk_rows[p]
+        read_name_list = rec['read_name_list']
+        base_list = rec['base_list']
+        base_counter = rec['base_counter']
+        read_start_end_set = rec['read_start_end_set']
+
+        for idx in range(len(read_name_list)):
+            hap_dict[read_name_list[idx]] = 0
+
+        if len(read_start_end_set) >= len(base_list) * eps_rse:
+            all_read_start_end_set = all_read_start_end_set.union(
+                set([read_name_list[r_idx] for r_idx in read_start_end_set]))
+
+        pos_dict[p] = dict(zip(read_name_list, base_list))
+        center_ref_base = ref_seq_site[p - ref_anchor]
+
+        if p == pos:
+            for rn in read_name_list:
+                ALL_HAP_LIST[hap_dict[rn]] += 1
+                if rn.endswith('0'):
+                    ALL_HAP_FORWARD_LIST[hap_dict[rn]] += 1
+                elif rn.endswith('1'):
+                    ALL_HAP_REVERSE_LIST[hap_dict[rn]] += 1
+
+            if is_snp:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if ''.join(value) == alt_base])
+            elif is_ins:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if
+                     ''.join(value).replace('+', '').upper() == alt_base and '+' in ''.join(value)])
+            elif is_del:
+                alt_base_read_name_set = set(
+                    [key for key, value in zip(read_name_list, base_list) if
+                     len(ref_base) == len(value[1]) and '-' in value[1]])
+
+            for rn in alt_base_read_name_set:
+                HAP_LIST[hap_dict[rn]] += 1
+                if rn.endswith('0'):
+                    HAP_FORWARD_LIST[hap_dict[rn]] += 1
+                elif rn.endswith('1'):
+                    HAP_REVERSE_LIST[hap_dict[rn]] += 1
+
+        if len(base_counter) == 1 and base_counter[center_ref_base] > 0:
+            continue
+        pos_counter_dict[p] = base_counter
+
+    pos_dict = dict(pos_dict)
+    pos_counter_dict = dict(pos_counter_dict)
+
+    return _postfilter_finalize_line(
+        ctg_name, pos, ref_base, alt_base, flanking,
+        pos_dict, pos_counter_dict, hap_dict,
+        all_read_start_end_set, alt_base_read_name_set,
+        ALL_HAP_LIST, HAP_LIST, ALL_HAP_FORWARD_LIST, ALL_HAP_REVERSE_LIST,
+        HAP_FORWARD_LIST, HAP_REVERSE_LIST,
+        ref_seq_site, ref_anchor,
+        disable_read_start_end_filtering, max_co_exist_read_num)
+
+
+def postfilter_per_pos(args):
+    pos = args.pos
+    ctg_name = args.ctg_name
+    ref_base = args.ref_base
+    alt_base = args.alt_base
+    tumor_bam_fn = args.tumor_bam_fn
+    if not os.path.exists(tumor_bam_fn):
+        tumor_bam_fn += ctg_name + '.bam'
+    flanking = args.flanking
+    region_lo = max(pos - flanking, 1)
+    region_hi = pos + flanking + 1
+    chunk_rows = _run_mpileup_postfilter_chunk_dict(
+        tumor_bam_fn, args.samtools, ctg_name, region_lo, region_hi, args.min_mq, args.min_bq)
+    chunk_ref = reference_sequence_from(
+        samtools_execute_command=args.samtools,
+        fasta_file_path=args.ref_fn,
+        regions=["%s:%s-%s" % (ctg_name, region_lo, region_hi)])
+    if chunk_ref is None:
+        chunk_ref = ""
+    line = _postfilter_build_state_and_line(
+        ctg_name, pos, ref_base, alt_base, flanking,
+        chunk_rows, chunk_ref, region_lo,
+        args.disable_read_start_end_filtering, args.min_alt_coverage)
+    print(line)
 
 
 def update_filter_info(args, key, row_str, fail_pos_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
@@ -419,6 +518,67 @@ def update_filter_info(args, key, row_str, fail_pos_set, fail_pass_read_start_en
     return row_str, is_candidate_filtered
 
 
+def _postfilter_candidates_progress(total_num):
+    if total_num % 1000 == 0:
+        print("[INFO] Postfilter variants: {} candidates processed".format(total_num), flush=True)
+
+
+def _postfilter_per_pos_parallel_argv(
+        args, threads_low, pf_info_path, main_entry, flanking, max_co_exist_read_num, is_indel):
+    cmd_list = [
+        args.parallel, '-C', ' ', '-j', str(threads_low),
+        args.pypy3, main_entry, 'postfilter_variants',
+        '--ctg_name', '{1}',
+        '--pos', '{2}',
+        '--ref_base', '{3}',
+        '--alt_base', '{4}',
+        '--af', '{5}',
+        '--qual', '{6}',
+        '--samtools', args.samtools,
+        '--tumor_bam_fn', args.tumor_bam_fn,
+        '--ref_fn', args.ref_fn,
+        '--flanking', str(flanking),
+        '--min_mq', str(args.min_mq),
+        '--min_bq', str(args.min_bq),
+        '--min_alt_coverage', str(max_co_exist_read_num),
+        '--disable_read_start_end_filtering', str(args.disable_read_start_end_filtering),
+        '--enable_postfilter', 'False',
+        '::::',
+        pf_info_path,
+    ]
+    if is_indel:
+        idx = cmd_list.index('--enable_postfilter')
+        cmd_list.insert(idx, '--is_indel')
+    return cmd_list
+
+
+def _ingest_postfilter_output_line(row, fail_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
+                                   fail_pass_strand_bias_set, fail_pass_sequence_entropy_set,
+                                   strand_bias_p_value_dict):
+    columns = row.rstrip().split()
+    if len(columns) < 8:
+        return False
+    ctg_o, pos, pass_hard_filter, pass_read_start_end, pass_co_exist, pass_strand_bias, strand_bias_p_value, pass_sequence_entropy = columns[:8]
+    int_pos = int(pos)
+    pass_hard_filter = str2bool(pass_hard_filter)
+    pass_read_start_end = str2bool(pass_read_start_end)
+    pass_co_exist = str2bool(pass_co_exist)
+    pass_strand_bias = str2bool(pass_strand_bias)
+    pass_sequence_entropy = str2bool(pass_sequence_entropy)
+    if not pass_hard_filter:
+        fail_set.add((ctg_o, int_pos))
+    if not pass_read_start_end:
+        fail_pass_read_start_end_set.add((ctg_o, int_pos))
+    if not pass_co_exist:
+        fail_pass_co_exist_set.add((ctg_o, int_pos))
+    if not pass_strand_bias:
+        fail_pass_strand_bias_set.add((ctg_o, int_pos))
+    if not pass_sequence_entropy:
+        fail_pass_sequence_entropy_set.add((ctg_o, int_pos))
+    strand_bias_p_value_dict[(ctg_o, int_pos)] = strand_bias_p_value
+    return True
+
+
 def postfilter(args):
     ctg_name = args.ctg_name
     threads = args.threads
@@ -428,6 +588,7 @@ def postfilter(args):
     flanking = args.flanking
     output_dir = args.output_dir
     is_indel = args.is_indel
+    max_co_exist_read_num = args.min_alt_coverage
     if not os.path.exists(output_dir):
         subprocess.run("mkdir -p {}".format(output_dir), shell=True)
 
@@ -468,30 +629,23 @@ def postfilter(args):
         pf_info_output_path = os.path.join(output_dir, "PF_INFO_SNV")
     else:
         pf_info_output_path = os.path.join(output_dir, "PF_INFO_INDEL")
-    with open(pf_info_output_path, 'w') as f:
+    _pf_buf_size = min(16 * 1024 * 1024, max(1024 * 1024, 1024 * (1 + len(input_variant_dict) // 10000)))
+    sites_by_contig = defaultdict(list)
+    site_meta = {}
+    with open(pf_info_output_path, 'w', buffering=_pf_buf_size) as f:
         for key, POS in input_variant_dict.items():
-            ctg_name = args.ctg_name if args.ctg_name is not None else key[0]
+            ctg_name_out = args.ctg_name if args.ctg_name is not None else key[0]
             pos = key if args.ctg_name is not None else key[1]
-            info_list = [ctg_name, str(pos), POS.reference_bases, POS.alternate_bases[0], str(POS.af), str(POS.qual)]
+            site_meta[(ctg_name_out, pos)] = (POS.reference_bases, POS.alternate_bases[0])
+            sites_by_contig[ctg_name_out].append(pos)
+            info_list = [ctg_name_out, str(pos), POS.reference_bases, POS.alternate_bases[0], str(POS.af), str(POS.qual)]
             f.write(' '.join(info_list) + '\n')
 
-    file_directory = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    main_entry = os.path.join(file_directory, "clairs_to.py")
+    for _cname in sites_by_contig:
+        sites_by_contig[_cname].sort()
 
-    parallel_command = "{} -C ' ' -j{} {} {} postfilter_variants".format(args.parallel, threads_low, args.pypy3, main_entry)
-    parallel_command += " --ctg_name {1}"
-    parallel_command += " --pos {2}"
-    parallel_command += " --ref_base {3}"
-    parallel_command += " --alt_base {4}"
-    parallel_command += " --af {5}"
-    parallel_command += " --qual {6}"
-    parallel_command += " --samtools " + str(args.samtools)
-    parallel_command += " --tumor_bam_fn " + str(args.tumor_bam_fn)
-    parallel_command += " --ref_fn " + str(args.ref_fn)
-    parallel_command += " --disable_read_start_end_filtering " + str(args.disable_read_start_end_filtering)
-    parallel_command += " :::: " + str(pf_info_output_path)
-
-    postfilter_process = subprocess_popen(shlex.split(parallel_command))
+    pass_site_count = sum(len(plist) for plist in sites_by_contig.values())
+    variants_chunk_mode = getattr(args, 'postfilter_variants_chunk_mode', False)
 
     total_num = 0
     fail_set = set()
@@ -501,34 +655,85 @@ def postfilter(args):
     fail_pass_sequence_entropy_set = set()
     strand_bias_p_value_dict = dict()
 
-    for row in postfilter_process.stdout:
-        columns = row.rstrip().split()
-        if len(columns) < 4:
-            continue
-        total_num += 1
-        ctg_name, pos, pass_hard_filter, pass_read_start_end, pass_co_exist, pass_strand_bias, strand_bias_p_value, pass_sequence_entropy = columns[:8]
-        pos = int(pos)
-        pass_hard_filter = str2bool(pass_hard_filter)
-        pass_read_start_end = str2bool(pass_read_start_end)
-        pass_co_exist = str2bool(pass_co_exist)
-        pass_strand_bias = str2bool(pass_strand_bias)
-        pass_sequence_entropy = str2bool(pass_sequence_entropy)
-        if not pass_hard_filter:
-            fail_set.add((ctg_name, pos))
-        if not pass_read_start_end:
-            fail_pass_read_start_end_set.add((ctg_name, pos))
-        if not pass_co_exist:
-            fail_pass_co_exist_set.add((ctg_name, pos))
-        if not pass_strand_bias:
-            fail_pass_strand_bias_set.add((ctg_name, pos))
-        if not pass_sequence_entropy:
-            fail_pass_sequence_entropy_set.add((ctg_name, pos))
-        strand_bias_p_value_dict[(ctg_name, pos)] = strand_bias_p_value
-        if total_num > 0 and total_num % 1000 == 0:
-            print("[INFO] Processing in {}, total processed positions: {}".format(ctg_name, total_num))
+    if variants_chunk_mode:
+        chunk_max_sites = max(1, int(getattr(args, 'postfilter_chunk_max_sites', DEFAULT_POSTFILTER_CHUNK_MAX_SITES)))
+        chunk_max_span = max(1, int(getattr(args, 'postfilter_chunk_max_span', DEFAULT_POSTFILTER_CHUNK_MAX_SPAN)))
+        tumor_bam_work = args.tumor_bam_fn
+        if ctg_name is not None and not os.path.exists(tumor_bam_work):
+            tumor_bam_work = tumor_bam_work + ctg_name + '.bam'
 
-    postfilter_process.stdout.close()
-    postfilter_process.wait()
+        chunk_jobs = []
+        for contig, plist in sites_by_contig.items():
+            for batch, reg_lo, reg_hi in _group_postfilter_chunk_positions(
+                    plist, flanking, chunk_max_sites, chunk_max_span):
+                chunk_jobs.append((contig, tuple(batch), reg_lo, reg_hi))
+        chunk_jobs = _fanout_chunk_jobs_for_parallelism(chunk_jobs, threads_low, flanking)
+
+        def _run_postfilter_chunk(job):
+            contig, batch, reg_lo, reg_hi = job
+            chunk_rows = _run_mpileup_postfilter_chunk_dict(
+                tumor_bam_work, args.samtools, contig, reg_lo, reg_hi, args.min_mq, args.min_bq)
+            chunk_ref = reference_sequence_from(
+                samtools_execute_command=args.samtools,
+                fasta_file_path=args.ref_fn,
+                regions=["{}:{}-{}".format(contig, reg_lo, reg_hi)])
+            if chunk_ref is None:
+                chunk_ref = ""
+            out_lines = []
+            for pos_p in batch:
+                ref_b, alt_b = site_meta[(contig, pos_p)]
+                out_lines.append(_postfilter_build_state_and_line(
+                    contig, pos_p, ref_b, alt_b, flanking, chunk_rows, chunk_ref, reg_lo,
+                    args.disable_read_start_end_filtering, max_co_exist_read_num))
+            return out_lines
+
+        if len(chunk_jobs) <= 1 or threads_low <= 1:
+            for job in chunk_jobs:
+                for line_str in _run_postfilter_chunk(job):
+                    if _ingest_postfilter_output_line(
+                            line_str, fail_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
+                            fail_pass_strand_bias_set, fail_pass_sequence_entropy_set, strand_bias_p_value_dict):
+                        total_num += 1
+                        _postfilter_candidates_progress(total_num)
+        else:
+            with ThreadPoolExecutor(max_workers=min(threads_low, len(chunk_jobs))) as ex:
+                for lines in ex.map(_run_postfilter_chunk, chunk_jobs):
+                    for line_str in lines:
+                        if _ingest_postfilter_output_line(
+                                line_str, fail_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
+                                fail_pass_strand_bias_set, fail_pass_sequence_entropy_set,
+                                strand_bias_p_value_dict):
+                            total_num += 1
+                            _postfilter_candidates_progress(total_num)
+    else:
+        _src_dir = os.path.dirname(os.path.realpath(__file__))
+        main_entry_pf = os.path.join(os.path.dirname(_src_dir), "clairs_to.py")
+        if not os.path.isfile(main_entry_pf):
+            print("[ERROR] clairs_to.py not found next to src/ at: {}".format(main_entry_pf), flush=True)
+            sys.exit(1)
+        if pass_site_count > 0:
+            cmd_list = _postfilter_per_pos_parallel_argv(
+                args, threads_low, pf_info_output_path, main_entry_pf, flanking,
+                max_co_exist_read_num, is_indel)
+            postfilter_parallel_proc = subprocess.Popen(
+                cmd_list,
+                stdout=subprocess.PIPE,
+                stderr=None,
+                universal_newlines=True,
+                bufsize=8388608)
+            for row in postfilter_parallel_proc.stdout:
+                if _ingest_postfilter_output_line(
+                        row, fail_set, fail_pass_read_start_end_set, fail_pass_co_exist_set,
+                        fail_pass_strand_bias_set, fail_pass_sequence_entropy_set,
+                        strand_bias_p_value_dict):
+                    total_num += 1
+                    _postfilter_candidates_progress(total_num)
+            postfilter_parallel_proc.stdout.close()
+            rc = postfilter_parallel_proc.wait()
+            if rc != 0:
+                print("[ERROR] postfilter variants per-position parallel (GNU parallel) exited with code {}".format(rc),
+                      flush=True)
+                sys.exit(rc)
 
     for key in sorted(pileup_variant_dict.keys()):
         row_str = pileup_variant_dict[key].row_str.rstrip()
@@ -540,12 +745,6 @@ def postfilter(args):
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     p_vcf_writer.close()
-
-    print("[INFO] Total input calls: {}, filtered by all hard filers: {}".format(len(input_variant_dict), len(fail_set)))
-    print("[INFO] Total input calls: {}, filtered by read start and end: {}".format(len(input_variant_dict), len(fail_pass_read_start_end_set)))
-    print("[INFO] Total input calls: {}, filtered by variant cluster: {}".format(len(input_variant_dict), len(fail_pass_co_exist_set)))
-    print("[INFO] Total input calls: {}, filtered by strand bias: {}".format(len(input_variant_dict), len(fail_pass_strand_bias_set)))
-    print("[INFO] Total input calls: {}, filtered by low sequence entropy: {}".format(len(input_variant_dict), len(fail_pass_sequence_entropy_set)))
 
 
 def main():
@@ -590,7 +789,6 @@ def main():
     parser.add_argument('--samtools', type=str, default="samtools",
                         help="Absolute path to the 'samtools', samtools version >= 1.10 is required. Default: %(default)s")
 
-    # options for advanced users
     parser.add_argument('--enable_postfilter', type=str2bool, default=True,
                         help="EXPERIMENTAL: Apply haplotype filtering to the variant calls")
 
@@ -603,16 +801,21 @@ def main():
     parser.add_argument('--min_alt_coverage', type=int, default=2,
                         help="Minimum number of reads supporting an alternative allele required for a somatic variant to be called. Default: %(default)d")
 
-    ## filtering for Indel candidates
     parser.add_argument('--is_indel', action='store_true',
                         help=SUPPRESS)
 
-    ## test using one position
     parser.add_argument('--test_pos', type=int, default=None,
                         help=SUPPRESS)
 
-    ## flakning window size to process
     parser.add_argument('--flanking', type=int, default=100,
+                        help=SUPPRESS)
+
+    parser.add_argument('--postfilter_variants_chunk_mode', type=str2bool, default=False,
+                        help=SUPPRESS)
+
+    parser.add_argument('--postfilter_chunk_max_sites', type=int, default=DEFAULT_POSTFILTER_CHUNK_MAX_SITES,
+                        help=SUPPRESS)
+    parser.add_argument('--postfilter_chunk_max_span', type=int, default=DEFAULT_POSTFILTER_CHUNK_MAX_SPAN,
                         help=SUPPRESS)
 
     parser.add_argument('--debug', action='store_true',
