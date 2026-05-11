@@ -67,7 +67,7 @@ from haplotype_filtering import (
 )
 
 main_entry = os.path.join(file_directory, "clairs_to.py")
-MAX_STEP = 20
+MAX_STEP = 30
 
 
 def _sanitize_sample_for_path(sample_name):
@@ -192,10 +192,17 @@ def check_skip_steps_legal(args):
     skip_steps_list = skip_steps.rstrip().split(",")
     if len(skip_steps_list) == 0:
         sys.exit(log_error("[ERROR] --skip_steps option provided but no skip steps index found"))
+    saw_valid = False
     for step in skip_steps_list:
+        step = step.strip()
+        if step == '':
+            continue
+        saw_valid = True
         if int(step) < 1 or int(step) > MAX_STEP:
             sys.exit(log_error(
                 "[ERROR] --skip_steps option provided but contains invalid skip steps index, should be 1-index"))
+    if not saw_valid:
+        sys.exit(log_error("[ERROR] --skip_steps option provided but no skip steps index found"))
 
 
 def check_python_path():
@@ -1311,13 +1318,15 @@ def somatic_calling(args):
 
     if not args.disable_nonsomatic_tagging:
         echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
-        gf_command = '( ' + time + args.parallel
+        snv_nst_summary_tsv = args.work_tmp + '/vcf_output/snv_nonsomatic_tagging_summary.tsv'
+        gf_command = '( rm -f ' + snv_nst_summary_tsv + ' && ' + time + args.parallel
         gf_command += ' --joblog ' + args.work_logs + '/parallel_3_nonsomatic_tagging_snv.log'
         gf_command += ' -j ' + str(args.threads)
         gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
         gf_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/snv_pileup.vcf'
         gf_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/snv_nonsomatic_tagging_{1}.vcf'
         gf_command += ' --ctg_name {1} '
+        gf_command += ' --nonsomatic_summary_aggregate_tsv ' + snv_nst_summary_tsv
         gf_command += ' --pypy3 ' + args.pypy
         gf_command += ' --parallel ' + args.parallel
         gf_command += ' --show_ref ' if args.print_ref_calls else ''
@@ -1339,6 +1348,11 @@ def somatic_calling(args):
         p_mv_command += ' --vcf_fn_prefix ' + 'snv_nonsomatic_tagging_'
         p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/snv_pileup_nonsomatic_tagging.vcf'
         commands_list += [p_mv_command]
+        echo_list.append("[INFO] Non-somatic Tagging Summary (SNV)")
+        snv_summary_cmd = (
+            args.pypy + ' ' + main_entry + ' nonsomatic_tagging '
+            '--print_sample_nonsomatic_summary_from_tsv ' + snv_nst_summary_tsv)
+        commands_list += [snv_summary_cmd]
     else:
         echo_list.append("[INFO] STEP 3: Non-somatic Tagging for SNV Variants")
         nst_command = "ln -sf {} {}".format(args.work_tmp + '/vcf_output/snv_pileup.vcf',
@@ -1490,6 +1504,7 @@ def somatic_calling(args):
         hap_g_command += ' --haplotype_filtering_chunk_mode ' + str(args.haplotype_filtering_chunk_mode)
         hap_g_command += ' --haplotype_chunk_max_sites ' + str(args.haplotype_chunk_max_sites)
         hap_g_command += ' --haplotype_chunk_max_span ' + str(args.haplotype_chunk_max_span)
+        hap_g_command += ' --haplotype_chunk_mpileup_bed ' + str(args.haplotype_chunk_mpileup_bed)
         if args.haplotype_input_filter_tag is not None:
             hap_g_command += ' --input_filter_tag ' + shlex.quote(args.haplotype_input_filter_tag)
         if args.ctg_name is not None:
@@ -1642,13 +1657,15 @@ def somatic_calling(args):
 
         if not args.disable_nonsomatic_tagging:
             echo_list.append("[INFO] STEP 7: Non-somatic Tagging for Indel Variants")
-            indel_gf_command = '( ' + time + args.parallel
+            indel_nst_summary_tsv = args.work_tmp + '/vcf_output/indel_nonsomatic_tagging_summary.tsv'
+            indel_gf_command = '( rm -f ' + indel_nst_summary_tsv + ' && ' + time + args.parallel
             indel_gf_command += ' --joblog ' + args.work_logs + '/parallel_7_nonsomatic_tagging_indel.log'
             indel_gf_command += ' -j ' + str(args.threads)
             indel_gf_command += ' ' + args.pypy + ' ' + main_entry + ' nonsomatic_tagging'
             indel_gf_command += ' --pileup_vcf_fn ' + args.work_tmp + '/vcf_output/indel_pileup.vcf'
             indel_gf_command += ' --output_vcf_fn ' + args.work_tmp + '/vcf_output/indel_nonsomatic_tagging_{1}.vcf'
             indel_gf_command += ' --ctg_name {1} '
+            indel_gf_command += ' --nonsomatic_summary_aggregate_tsv ' + indel_nst_summary_tsv
             indel_gf_command += ' --pypy3 ' + args.pypy
             indel_gf_command += ' --parallel ' + args.parallel
             indel_gf_command += ' --show_ref ' if args.print_ref_calls else ''
@@ -1670,8 +1687,13 @@ def somatic_calling(args):
             indel_p_mv_command += ' --vcf_fn_prefix ' + 'indel_nonsomatic_tagging_'
             indel_p_mv_command += ' --output_fn ' + args.work_tmp + '/vcf_output/indel_pileup_nonsomatic_tagging.vcf'
             commands_list += [indel_p_mv_command]
+            echo_list.append("[INFO] Non-somatic Tagging Summary (Indel)")
+            indel_summary_cmd = (
+                args.pypy + ' ' + main_entry + ' nonsomatic_tagging '
+                '--print_sample_nonsomatic_summary_from_tsv ' + indel_nst_summary_tsv)
+            commands_list += [indel_summary_cmd]
         else:
-            echo_list.append("[INFO] STEP 7: Non-somatic Tagging for SNV Variants")
+            echo_list.append("[INFO] STEP 7: Non-somatic Tagging for Indel Variants")
             indel_nst_command = "ln -sf {} {}".format(args.work_tmp + '/vcf_output/indel_pileup.vcf',
                                                       args.work_tmp + '/vcf_output/indel_pileup_nonsomatic_tagging.vcf')
             commands_list += [indel_nst_command]
@@ -1738,6 +1760,7 @@ def somatic_calling(args):
             indel_hap_g_command += ' --haplotype_filtering_chunk_mode ' + str(args.haplotype_filtering_chunk_mode)
             indel_hap_g_command += ' --haplotype_chunk_max_sites ' + str(args.haplotype_chunk_max_sites)
             indel_hap_g_command += ' --haplotype_chunk_max_span ' + str(args.haplotype_chunk_max_span)
+            indel_hap_g_command += ' --haplotype_chunk_mpileup_bed ' + str(args.haplotype_chunk_mpileup_bed)
             if args.haplotype_input_filter_tag is not None:
                 indel_hap_g_command += ' --input_filter_tag ' + shlex.quote(args.haplotype_input_filter_tag)
             if args.ctg_name is not None:
@@ -1836,21 +1859,39 @@ def somatic_calling(args):
         m = re.search(r'STEP \d+:\s*(.+?)(?:\n|$)', echo)
         return m.group(1).strip() if m else ""
 
-    skip_steps = args.skip_steps.rstrip().split(',') if args.skip_steps else None
+    skip_tokens = None
+    if args.skip_steps:
+        skip_tokens = [s.strip() for s in args.skip_steps.rstrip().split(',') if s.strip()]
     stdout = sys.stdout if args.tee is None else args.tee.stdin
+    if skip_tokens is not None:
+        skip_idx_sorted = sorted({int(x) for x in skip_tokens})
+        n_skip = len(skip_idx_sorted)
+        if n_skip > 0:
+            if n_skip <= 10:
+                disp = ','.join(str(x) for x in skip_idx_sorted)
+            elif skip_idx_sorted[-1] - skip_idx_sorted[0] + 1 == n_skip:
+                disp = '{}-{}'.format(skip_idx_sorted[0], skip_idx_sorted[-1])
+            else:
+                disp = '{},...,{} ({} indices)'.format(
+                    skip_idx_sorted[0], skip_idx_sorted[-1], n_skip)
+            logging(
+                "[INFO] --skip_steps: omitting {} command(s) [{}]; no per-step echo/shell; "
+                "assume prior outputs under work_tmp exist.".format(n_skip, disp))
+            logging("")
+
     for i, (command, echo) in enumerate(zip(commands_list, echo_list)):
         step_num = step_numbers[i] if i < len(step_numbers) else (i + 1)
         step_desc = step_desc_from_echo(echo)
+        cmd_index = i + 1
+
+        if skip_tokens is not None and str(cmd_index) in skip_tokens:
+            continue
+
         logging(echo)
         logging("[INFO] RUN THE FOLLOWING COMMAND:")
         logging(command)
         logging("")
         if not args.dry_run:
-            cmd_index = i + 1
-            if skip_steps is not None and str(cmd_index) in skip_steps:
-                logging("[INFO] --skip_steps is enabled, skip running command {} (STEP {}).".format(cmd_index, step_num))
-                logging("")
-                continue
             return_code = run_command_with_parallel_check(command, step_num, step_desc=step_desc, stdout=stdout)
         logging("")
 
@@ -2304,6 +2345,13 @@ def somatic_parser():
         "--haplotype_chunk_max_span",
         type=int,
         default=DEFAULT_HAPLOTYPE_CHUNK_MAX_SPAN_BP,
+        help=SUPPRESS
+    )
+
+    other_params.add_argument(
+        "--haplotype_chunk_mpileup_bed",
+        type=str2bool,
+        default=True,
         help=SUPPRESS
     )
 
