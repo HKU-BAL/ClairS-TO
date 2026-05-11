@@ -22,10 +22,12 @@ from shared.utils import IUPAC_base_to_num_dict as BASE2NUM
 LOW_AF_SNV = 0.1
 LOW_AF_INDEL = 0.3
 min_hom_germline_af = 0.75
+# Match Clair-Mosaic ori_repo ClairS-TO/src/haplotype_filtering.py (variant cluster + homo overlap ratio).
 eps = 0.5
 eps_rse = 0.2
 sequence_entropy_threshold = 0.9
 flanking = 100
+
 
 def delete_lines_after(target_str, delimiter):
     lines = target_str.split('\n')
@@ -279,19 +281,21 @@ def _resolve_tumor_bam_path(tumor_bam_fn, chrom):
 
 
 def _merge_candidate_flank_bed_intervals(sorted_positions, flank):
+    """UCSC BED: chromStart 0-based inclusive, chromEnd exclusive; covers 1-based genomic [win_lo, win_hi]."""
     merged = []
     for pos in sorted_positions:
         win_lo = max(pos - flank, 1)
-        s = win_lo - 1
-        e = pos + flank + 1
+        win_hi = pos + flank
+        chrom_start = win_lo - 1
+        chrom_end = win_hi
         if not merged:
-            merged.append([s, e])
+            merged.append([chrom_start, chrom_end])
             continue
         ps, pe = merged[-1]
-        if s <= pe:
-            merged[-1][1] = max(pe, e)
+        if chrom_start <= pe:
+            merged[-1][1] = max(pe, chrom_end)
         else:
-            merged.append([s, e])
+            merged.append([chrom_start, chrom_end])
     return [(a[0], a[1]) for a in merged]
 
 
@@ -346,7 +350,8 @@ def _haplotype_finalize_line(
         hetero_germline_set, homo_germline_set,
         ref_seq_site, ref_anchor,
         disable_read_start_end_filtering, max_co_exist_read_num,
-        af, qual):
+        af, qual,
+        pass_bq, pass_mq):
     is_snp = len(ref_base) == 1 and len(alt_base) == 1
     is_ins = len(ref_base) == 1 and len(alt_base) > 1
     is_del = len(ref_base) > 1 and len(alt_base) == 1
@@ -354,14 +359,11 @@ def _haplotype_finalize_line(
     pass_homo = True
     pass_hetero_both_side = True
     pass_read_start_end = True
-    pass_bq = True
-    pass_mq = True
     pass_co_exist = True
     pass_strand_bias = True
     pass_sequence_entropy = True
     match_count = 0
     ins_length = 0
-    qual = qual if qual is not None else 102
     af = af if af is not None else 1.0
 
     if not disable_read_start_end_filtering:
@@ -390,8 +392,12 @@ def _haplotype_finalize_line(
     alt_base_dict = defaultdict(int)
 
     for p, rb_dict in pos_dict.items():
-        rb = ref_seq_site[p - ref_anchor]
+        _ri = p - ref_anchor
+        if _ri < 0 or _ri >= len(ref_seq_site):
+            continue
+        rb = ref_seq_site[_ri]
         read_alt_dict = pos_dict[p]
+        # Match Clair-Mosaic ori_repo haplotype_filter_per_pos variant-cluster loop (only skip tumor pos).
         if p == pos:
             continue
 
@@ -407,10 +413,8 @@ def _haplotype_finalize_line(
                 if k in alt_base_read_name_set:
                     alt_base_dict[hap] += 1
 
-        read_alt_dict = pos_dict[p]
         inter_set = set(read_alt_dict.keys()).intersection(alt_base_read_name_set)
         alt_list = []
-
         for key in inter_set:
             base = ''.join(read_alt_dict[key]).upper()
             if base != rb and base not in '#*':
@@ -435,7 +439,10 @@ def _haplotype_finalize_line(
             p = int(p)
             if p not in pos_dict:
                 continue
-            rb = ref_seq_site[p - pos + flanking]
+            _ri = p - ref_anchor
+            if _ri < 0 or _ri >= len(ref_seq_site):
+                continue
+            rb = ref_seq_site[_ri]
 
             read_alt_dict = pos_dict[p]
             if len(rb) == 1 and len(ab) == 1:
@@ -452,7 +459,9 @@ def _haplotype_finalize_line(
             if len(phased_overlap_set) == 0 or len(phased_overlap_set) * 2 < float(len(overlap_count)):
                 continue
 
-            inter_set = set([key for key in alt_base_read_name_set if hap_dict[key] == hap_index]).intersection(
+            # Match Mosaic ori_repo: intersect suffixed pileup keys (not physical QNAME).
+            inter_set = set(
+                [key for key in alt_base_read_name_set if hap_dict[key] == hap_index]).intersection(
                 phased_overlap_set)
             if len(inter_set) == 0:
                 pass_hetero = False
@@ -462,7 +471,10 @@ def _haplotype_finalize_line(
         p = int(p)
         if p not in pos_dict:
             continue
-        rb = ref_seq_site[p - pos + flanking]
+        _ri = p - ref_anchor
+        if _ri < 0 or _ri >= len(ref_seq_site):
+            continue
+        rb = ref_seq_site[_ri]
         read_alt_dict = pos_dict[p]
 
         if len(rb) == 1 and len(ab) == 1:
@@ -533,13 +545,11 @@ def _haplotype_finalize_line(
 
     base_count_table = [[a0, r0], [a1, r1]]
     p_value = fisher_exact(base_count_table)
-    alt_on_strands = (a0 + a1) > 0
-    if is_snp:
-        if p_value < 0.001 or (alt_on_strands and (a0 == 0 or a1 == 0)):
-            pass_strand_bias = False
-    elif not is_snp:
-        if p_value < 0.01 or (alt_on_strands and (a0 == 0 or a1 == 0)):
-            pass_strand_bias = False
+    # Match ori haplotype_filter_per_pos operator precedence (strict on empty alt strand counts).
+    if is_snp and p_value < 0.001 or (a0 == 0 or a1 == 0):
+        pass_strand_bias = False
+    elif not is_snp and p_value < 0.01 or (a0 == 0 or a1 == 0):
+        pass_strand_bias = False
 
     if not is_snp:
         candidate_sequence_entropy = sqeuence_entropy_from(reference_sequence=ref_seq_site)
@@ -568,6 +578,8 @@ def _haplotype_build_state_and_line(
     ref_end = pos + flanking + 1
     i0 = ref_anchor - region_lo
     i1 = ref_end - region_lo + 1
+    if chunk_ref is None:
+        chunk_ref = ''
     ref_seq_site = chunk_ref[i0:i1]
 
     hetero_germline_set = set()
@@ -614,13 +626,12 @@ def _haplotype_build_state_and_line(
             all_read_start_end_set.update(read_name_list[r_idx] for r_idx in read_start_end_set)
 
         pos_dict[p] = dict(zip(read_name_list, base_list))
-        center_ref_base = chunk_ref[p - region_lo] if chunk_ref is not None else ref_seq_site[p - ref_anchor]
 
-        average_min_bq = param.ont_min_bq
-        average_min_mq = param.min_mq
         if p == pos:
             bq_list = rec['bq_list']
             mq_list = rec['mq_list']
+            average_min_bq = param.ont_min_bq
+            average_min_mq = param.min_mq
             if is_snp:
                 alt_base_bq_set = [bq for key, value, bq in zip(read_name_list, base_list, bq_list) if
                                    ''.join(value) == alt_base]
@@ -672,6 +683,10 @@ def _haplotype_build_state_and_line(
                 elif rn.endswith('1'):
                     HAP_REVERSE_LIST[hap_dict[rn]] += 1
 
+        _ci = p - region_lo
+        if not chunk_ref or _ci < 0 or _ci >= len(chunk_ref):
+            continue
+        center_ref_base = chunk_ref[_ci]
         if len(base_counter) == 1 and base_counter[center_ref_base] > 0:
             continue
         pos_counter_dict[p] = base_counter
@@ -688,7 +703,7 @@ def _haplotype_build_state_and_line(
         hetero_germline_set, homo_germline_set,
         ref_seq_site, ref_anchor,
         disable_read_start_end_filtering, max_co_exist_read_num,
-        af, qual)
+        af, qual, pass_bq, pass_mq)
 
 
 def haplotype_filter_per_pos(args):
@@ -1063,15 +1078,18 @@ def haplotype_filter(args):
 
         def _run_haplotype_chunk(job):
             contig, batch, _, _ = job
-            safe_ctg = contig.replace('/', '_')
             bam_this = _resolve_tumor_bam_path(args.tumor_bam_fn, contig)
             batch_sorted = tuple(sorted(batch))
             sub_lo = max(min(batch_sorted) - flanking, 1)
             sub_hi = max(batch_sorted) + flanking + 1
-            fd, bed_path = tempfile.mkstemp(suffix='.bed', prefix='hf_mpileup_{}_'.format(safe_ctg))
-            os.close(fd)
+            use_bed = getattr(args, 'haplotype_chunk_mpileup_bed', True)
+            bed_path = None
             try:
-                _write_candidate_flank_bed(contig, batch_sorted, flanking, bed_path)
+                if use_bed:
+                    safe_ctg = contig.replace('/', '_')
+                    fd, bed_path = tempfile.mkstemp(suffix='.bed', prefix='hf_mpileup_{}_'.format(safe_ctg))
+                    os.close(fd)
+                    _write_candidate_flank_bed(contig, batch_sorted, flanking, bed_path)
                 chunk_rows = _run_mpileup_chunk_dict(
                     bam_this, args.samtools, contig, sub_lo, sub_hi, args.min_mq, args.min_bq,
                     bed_file=bed_path)
@@ -1088,12 +1106,13 @@ def haplotype_filter(args):
                         contig, pos, ref_b, alt_b, flanking, chunk_rows, chunk_ref, sub_lo,
                         het_str, hom_str, args.disable_read_start_end_filtering, max_co_exist_read_num,
                         af_v, qual_v))
+                return out_lines
             finally:
-                try:
-                    os.unlink(bed_path)
-                except OSError:
-                    pass
-            return out_lines
+                if bed_path is not None:
+                    try:
+                        os.unlink(bed_path)
+                    except OSError:
+                        pass
 
         if len(chunk_jobs) <= 1 or threads_low <= 1:
             for job in chunk_jobs:
@@ -1159,13 +1178,14 @@ def haplotype_filter(args):
         p_vcf_writer.vcf_writer.write(row_str + '\n')
 
     n_in = len(input_variant_dict)
+    fail_no_anc = fail_pass_hetero_set | fail_pass_homo_set
     print("[INFO] Total input calls: {}, filtered by all hard filters: {}".format(n_in, len(fail_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by low alt bq: {}".format(n_in, len(fail_pass_bq_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by low alt mq: {}".format(n_in, len(fail_pass_mq_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by read start and end: {}".format(n_in, len(fail_pass_read_start_end_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by variant cluster: {}".format(n_in, len(fail_pass_co_exist_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by no ancestry: {}".format(
-        n_in, len(fail_pass_hetero_set) + len(fail_pass_homo_set)), flush=True)
+        n_in, len(fail_no_anc)), flush=True)
     print("[INFO] Total input calls: {}, filtered by multi haplotypes: {}".format(n_in, len(fail_pass_hetero_both_side_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by strand bias: {}".format(n_in, len(fail_pass_strand_bias_set)), flush=True)
     print("[INFO] Total input calls: {}, filtered by low sequence entropy: {}".format(n_in, len(fail_pass_sequence_entropy_set)), flush=True)
@@ -1253,6 +1273,9 @@ def main():
 
     parser.add_argument('--haplotype_chunk_max_span', type=int,
                         default=DEFAULT_HAPLOTYPE_CHUNK_MAX_SPAN_BP,
+                        help=SUPPRESS)
+
+    parser.add_argument('--haplotype_chunk_mpileup_bed', type=str2bool, default=True,
                         help=SUPPRESS)
 
     parser.add_argument('--add_phasing_info', type=str2bool, default=False,
