@@ -5,6 +5,11 @@ import hashlib
 import subprocess
 import threading
 
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
 from argparse import ArgumentParser, SUPPRESS
 from collections import defaultdict
 
@@ -31,6 +36,85 @@ def insert_after_line(original_str, target_line, insert_str):
             lines.insert(i+1, insert_str.rstrip('\n'))
             break
     return '\n'.join(lines)
+
+
+def _append_nonsomatic_summary_aggregate_tsv(aggregate_path, ctg_name, total_input, tagged_union,
+                                            remain_pass, pon_hit_totals, pon_fns):
+    """Append one contig's counts under an exclusive lock; first writer records #PON_PATHS for sample summary."""
+    if not aggregate_path:
+        return
+    line = '\t'.join(
+        [str(ctg_name if ctg_name is not None else '.'), str(total_input), str(tagged_union), str(remain_pass)]
+        + [str(h) for h in pon_hit_totals]) + '\n'
+    d = os.path.dirname(os.path.abspath(aggregate_path))
+    if d:
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            pass
+    fh = None
+    try:
+        fh = open(aggregate_path, 'a+', encoding='utf-8')
+        if fcntl is not None:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        fh.seek(0, os.SEEK_END)
+        if fh.tell() == 0:
+            meta = '#PON_PATHS\t' + '\t'.join(str(p) for p in pon_fns) + '\n'
+            fh.write(meta)
+        fh.write(line)
+        fh.flush()
+    finally:
+        if fh is not None:
+            if fcntl is not None:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            fh.close()
+
+
+def _print_sample_nonsomatic_summary_from_aggregate_tsv(aggregate_path):
+    if not aggregate_path or not os.path.isfile(aggregate_path):
+        print('[ERROR] Non-somatic summary aggregate file not found: {}'.format(aggregate_path), file=sys.stderr)
+        return
+    pon_fns = []
+    rows = []
+    with open(aggregate_path, encoding='utf-8', errors='replace') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            if line.startswith('#PON_PATHS'):
+                pon_fns = line.split('\t')[1:]
+            elif line.startswith('#'):
+                continue
+            elif line.strip():
+                rows.append(line.split('\t'))
+    if not rows:
+        print('[WARNING] No data rows in non-somatic summary aggregate file: {}'.format(aggregate_path),
+              file=sys.stderr)
+        return
+    try:
+        tot_in = sum(int(r[1]) for r in rows)
+        tot_tag = sum(int(r[2]) for r in rows)
+        tot_rem = sum(int(r[3]) for r in rows)
+    except (IndexError, ValueError) as e:
+        print('[ERROR] Malformed aggregate TSV {}: {}'.format(aggregate_path, e), file=sys.stderr)
+        return
+    n_pon = len(rows[0]) - 4
+    if n_pon < 0:
+        print('[ERROR] Malformed aggregate TSV (too few columns): {}'.format(aggregate_path), file=sys.stderr)
+        return
+    pon_totals = []
+    for i in range(n_pon):
+        try:
+            pon_totals.append(sum(int(r[4 + i]) for r in rows))
+        except (IndexError, ValueError):
+            pon_totals.append(0)
+    if len(pon_fns) < len(pon_totals):
+        pon_fns = list(pon_fns) + ['.'] * (len(pon_totals) - len(pon_fns))
+    elif len(pon_fns) > len(pon_totals):
+        pon_fns = pon_fns[:len(pon_totals)]
+    summary_line = _tagging_summary_line('ALL', tot_in, tot_tag, tot_rem, pon_fns, pon_totals)
+    print('[INFO] NonSomaticTaggingSummary: {}'.format(summary_line))
 
 
 def _tagging_summary_line(ctg_name, total_input, tagged_union, remain_pass, pon_fns, pon_hit_totals):
@@ -385,7 +469,17 @@ def _nonsomatic_tag_impl(args):
     summary_line = _tagging_summary_line(
         ctg_name, total_input, total_filter_by_all, total_remain_passes,
         pon_vcf_fn_list, pon_hit_totals)
-    print("[INFO] NonSomaticTaggingSummary: {}".format(summary_line))
+    suppress_summary = getattr(args, 'suppress_nonsomatic_tagging_summary', True)
+    aggregate_path = getattr(args, 'nonsomatic_summary_aggregate_tsv', None)
+    # Default suppress=True: with --nonsomatic_summary_aggregate_tsv, only append (parallel shards);
+    # full-sample line is printed once via --print_sample_nonsomatic_summary_from_tsv.
+    # Without aggregate TSV, always print one line for this invocation (single process / one contig / whole VCF).
+    if aggregate_path:
+        _append_nonsomatic_summary_aggregate_tsv(
+            aggregate_path, ctg_name, total_input, total_filter_by_all, total_remain_passes,
+            pon_hit_totals, pon_vcf_fn_list)
+    if not suppress_summary or not aggregate_path:
+        print("[INFO] NonSomaticTaggingSummary: {}".format(summary_line))
 
     contigs_order = major_contigs_order + input_keys_list
     contigs_order_list = sorted(input_keys_list, key=lambda x: contigs_order.index(x))
@@ -479,8 +573,19 @@ def main():
     parser.add_argument('--skip_pon_md5', action='store_true',
                         help="Skip PoN file MD5 (VCF header uses md5=skipped). Removes one full sequential read per PoN when using tabix, and reduces I/O when large PoNs would otherwise be read twice.")
 
+    parser.add_argument('--suppress_nonsomatic_tagging_summary', type=str2bool, default=True,
+                        help=SUPPRESS)
+    parser.add_argument('--nonsomatic_summary_aggregate_tsv', type=str_none, default=None,
+                        help=SUPPRESS)
+    parser.add_argument('--print_sample_nonsomatic_summary_from_tsv', type=str_none, default=None,
+                        help=SUPPRESS)
+
     global args
     args = parser.parse_args()
+
+    if args.print_sample_nonsomatic_summary_from_tsv:
+        _print_sample_nonsomatic_summary_from_aggregate_tsv(args.print_sample_nonsomatic_summary_from_tsv)
+        return
 
     nonsomatic_tag(args)
 
