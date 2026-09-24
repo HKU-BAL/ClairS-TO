@@ -51,6 +51,8 @@ import shared.param as param
 from shared.interval_tree import bed_tree_from
 from shared.utils import file_path_from, folder_path_from, subprocess_popen, str2bool, str_none, \
     legal_range_from, log_error, log_warning
+from shared.cna_resources import VERDICT_CONTIGS, resolve_cna_resources, missing_resource_files, \
+    unreadable_resource_files, loci_beyond_reference
 
 major_contigs = {"chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]}.union(
     {str(a) for a in list(range(1, 23)) + ["X", "Y"]})
@@ -279,6 +281,69 @@ def check_contig_in_bam(bam_fn, sorted_contig_list, samtools, allow_none=False, 
     return filtered_sorted_contig_list, found_contig
 
 
+def check_cna_resources(args, verdict_contigs, contig_length_by_name):
+    """Resolve the Verdict resources and disable Verdict, with a warning, if they cannot be used.
+
+    Checks, in order: the directory holds exactly one resource set; every file needed for the
+    contigs being called exists; the loci fit inside the reference given with --ref_fn (a locus
+    beyond the end of its contig proves the resources were built for another assembly, e.g.
+    GRCh38 resources with a T2T-CHM13 reference).
+    """
+    resources = resolve_cna_resources(args.cna_resource_dir)
+    if resources['errors']:
+        args.disable_verdict = True
+        logging(log_warning(
+            "[WARNING] Cannot use the CNA resource directory {} for Verdict: {}. "
+            "Install reference_files.tar.gz under $CONDA_PREFIX/bin/clairs-to_cna_data/, "
+            "or pass a complete resource set via --cna_resource_dir (see docs/verdict.md), "
+            "or use --disable_verdict. Disabling Verdict for this run.".format(
+                args.cna_resource_dir, '; '.join(resources['errors']))))
+        return
+
+    missing = missing_resource_files(resources, verdict_contigs)
+    if missing:
+        args.disable_verdict = True
+        logging(log_warning(
+            "[WARNING] CNA Verdict resource file(s) missing under {} (e.g. {}). "
+            "Install reference_files.tar.gz under $CONDA_PREFIX/bin/clairs-to_cna_data/, "
+            "or pass a complete path via --conda_prefix / --cna_resource_dir, "
+            "or use --disable_verdict. Disabling Verdict for this run.".format(
+                args.cna_resource_dir, os.path.basename(missing[0]))))
+        return
+
+    # Before loci_beyond_reference, which is the check that silently degrades: it reads the loci
+    # files, and a file it cannot open looks to it exactly like one with nothing out of range.
+    unreadable = unreadable_resource_files(resources, verdict_contigs)
+    if unreadable:
+        args.disable_verdict = True
+        logging(log_warning(
+            "[WARNING] CNA Verdict resource file(s) under {} exist but cannot be read (e.g. {}). "
+            "The reference files ship mode 0640, so a container started under a different uid "
+            "(e.g. `docker run -u $(id -u):$(id -g)`) can stat them "
+            "but not open them. Make them world-readable in the image "
+            "(`chmod -R a+rX $CONDA_PREFIX/bin/clairs-to_cna_data`), pass a readable set via "
+            "--cna_resource_dir, or use --disable_verdict. Disabling Verdict for this run.".format(
+                args.cna_resource_dir, os.path.basename(unreadable[0]))))
+        return
+
+    out_of_range = loci_beyond_reference(resources, verdict_contigs, contig_length_by_name)
+    if out_of_range:
+        args.disable_verdict = True
+        ctg, last_position, contig_length = out_of_range[0]
+        logging(log_warning(
+            "[WARNING] The CNA resources in {} do not match the reference given with --ref_fn: loci on {} "
+            "contig(s) lie beyond the end of the contig (e.g. {}:{} > {} bp). Verdict needs loci, allele and "
+            "GC content files built on the same assembly as the input BAM was aligned to; see docs/verdict.md. "
+            "Disabling Verdict for this run.".format(
+                args.cna_resource_dir, len(out_of_range), ctg, last_position, contig_length)))
+        return
+
+    args.cna_rt_file = resources['rt_file']
+    if resources['rt_file'] is None:
+        logging("[INFO] No replication timing file (RT_*.txt) under {}; Verdict will correct LogR for GC content "
+                "only, as ASCAT does when no replication timing file is given.".format(args.cna_resource_dir))
+
+
 def check_threads(args):
     threads = args.threads
     try:
@@ -431,6 +496,7 @@ def check_contigs_intersection(args, fai_fn):
     default_chunk_num = 0
     DEFAULT_CHUNK_SIZE = args.chunk_size
     contig_length_list = []
+    contig_length_by_name = {}
     contig_chunk_num = {}
 
     with open(fai_fn, 'r') as fai_fp:
@@ -451,6 +517,7 @@ def check_contigs_intersection(args, fai_fn):
 
             contig_set.add(contig_name)
             contig_length_list.append(contig_length)
+            contig_length_by_name[contig_name] = contig_length
             chunk_num = int(
                 contig_length / float(DEFAULT_CHUNK_SIZE)) + 1 if contig_length % DEFAULT_CHUNK_SIZE else int(
                 contig_length / float(DEFAULT_CHUNK_SIZE))
@@ -525,30 +592,16 @@ def check_contigs_intersection(args, fai_fn):
         output_file.write('\n'.join(sorted_contig_list))
 
     if not args.disable_verdict:
-        contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
-        verdict_flag = len(set(contigs_order).intersection(set(sorted_contig_list))) > 0
-        if not verdict_flag:
+        verdict_contigs = [ctg for ctg in sorted_contig_list if ctg in set(VERDICT_CONTIGS)]
+        if len(verdict_contigs) == 0:
             args.disable_verdict = True
             logging(log_warning(
-                "[WARNING] Verdict currently only works for GRCh38 reference genome, apply the --disable_verdict option!"))
+                "[WARNING] None of the calling contigs is one of chr1-chr22/chrX; Verdict needs 'chr'-prefixed "
+                "contig names matching its CNA resources. Applying the --disable_verdict option!"))
         elif args.cna_resource_dir is not None:
-            # Verdict needs G1000 loci per autosome/X (same layout as cna_germline_tagging); fail before alleleCounter.
-            loci_dir = os.path.join(args.cna_resource_dir, 'loci_files')
-            missing_loci = []
-            for ctg in sorted_contig_list:
-                if ctg not in contigs_order:
-                    continue
-                loci_fn = os.path.join(loci_dir, 'G1000_loci_hg38_{}.txt'.format(ctg))
-                if not os.path.isfile(loci_fn):
-                    missing_loci.append(loci_fn)
-            if missing_loci:
-                args.disable_verdict = True
-                logging(log_warning(
-                    "[WARNING] CNA Verdict loci file(s) missing under {} (e.g. {}). "
-                    "Install reference_files.tar.gz under $CONDA_PREFIX/bin/clairs-to_cna_data/, "
-                    "or pass a complete path via --conda_prefix / --cna_resource_dir, "
-                    "or use --disable_verdict. Disabling Verdict for this run.".format(
-                        loci_dir, os.path.basename(missing_loci[0]))))
+            # Verdict needs loci/alleles per autosome/X plus GC content (optionally replication timing);
+            # fail before alleleCounter, and refuse resources built for another assembly.
+            check_cna_resources(args, verdict_contigs, contig_length_by_name)
 
     chunk_list = []
     chunk_list_path = os.path.join(args.work_tmp, 'CHUNK_LIST')
@@ -999,12 +1052,13 @@ def check_args(args):
                 columns = row.strip().split("\t")
                 contig_name = columns[0]
                 ref_contigs_set.add(contig_name)
-        contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
-        verdict_flag = len(set(contigs_order).intersection(ref_contigs_set)) > 0
+        verdict_flag = len(set(VERDICT_CONTIGS).intersection(ref_contigs_set)) > 0
         if not verdict_flag:
             args.disable_verdict = True
             logging(log_warning(
-                "[WARNING] Verdict currently only works for GRCh38 reference genome, apply the --disable_verdict option!"))
+                "[WARNING] The reference has none of chr1-chr22/chrX; Verdict needs 'chr'-prefixed contig names "
+                "matching its CNA resources (GRCh38 by default, or the set given with --cna_resource_dir). "
+                "Applying the --disable_verdict option!"))
         if args.cna_resource_dir is None:
             args.cna_resource_dir = os.path.join(args.conda_prefix, 'bin', 'clairs-to_cna_data', 'reference_files')
         if args.allele_counter_dir is None:
@@ -1101,6 +1155,10 @@ def print_args(args):
     logging("[INFO] ENABLE APPLYING POSTFILTERING: {}".format(args.enable_postfilter))
     logging("[INFO] ENABLE APPLYING HAPLOTYPE FILTERING: {}".format(args.apply_haplotype_filtering))
     logging("[INFO] DISABLE APPLYING VERDICT: {}".format(args.disable_verdict))
+    if not args.disable_verdict:
+        logging("[INFO] VERDICT CNA RESOURCE DIRECTORY: {}".format(args.cna_resource_dir))
+        logging("[INFO] VERDICT LOGR CORRECTION: {}".format(
+            "GC content and replication timing" if getattr(args, 'cna_rt_file', None) else "GC content only"))
     logging("[INFO] DISABLE APPLYING NON-SOMATIC TAGGING: {}".format(args.disable_nonsomatic_tagging))
     logging("[INFO] DISABLE PRINTING NON-SOMATIC CALLS: {}".format(args.do_not_print_nonsomatic_calls))
     logging("[INFO] SKIP PON FILE MD5 (non-somatic tagging): {}".format(args.skip_pon_md5))
@@ -2446,7 +2504,7 @@ def somatic_parser():
         "--cna_resource_dir",
         type=str,
         default=None,
-        help=SUPPRESS
+        help="Directory of the CNA reference resources used by Verdict (per-contig loci and allele files, GC content and, optionally, replication timing). The resources must be built on the reference genome the input BAM was aligned to. Default: `${CONDA_PREFIX}/bin/clairs-to_cna_data/reference_files` (GRCh38). Use this option to run Verdict against another assembly such as T2T-CHM13, please check `docs/verdict.md` for the required layout."
     )
 
     other_params.add_argument(

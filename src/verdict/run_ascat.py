@@ -367,7 +367,13 @@ def run_ascat(tumor_logr_file, tumor_baf_file, germline_genotypes_file, tumor_lo
                 bafke = b[baf_slice][0]
             else:
                 baf_slice = np.where((het_indices > start - 10000) & (het_indices < end + 1 + 10000))[0]
-                bafke = b[baf_slice][0]
+                if len(baf_slice) > 0:
+                    bafke = b[baf_slice][0]
+                else:
+                    # No heterozygous probe within 10000 probes of this segment (e.g. a long run of
+                    # homozygous calls on the single-copy part of a male chrX). Use the nearest one;
+                    # het_indices is non-empty here and b is indexed in het space, so this is valid.
+                    bafke = b[int(np.argmin(np.abs(het_indices - start)))]
 
             nAraw = np.where(diploidprobes[start],
                              (rho - 1 - (bafke - 1) * 2 ** (logR / gamma) * ((1 - rho) * 2 + rho * psi)) / rho,

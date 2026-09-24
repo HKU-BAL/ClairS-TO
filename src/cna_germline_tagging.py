@@ -35,10 +35,23 @@ from argparse import ArgumentParser
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__))))
 from numpy import *
 
+from shared.cna_resources import VERDICT_CONTIGS, resolve_cna_resources
+
 file_directory = os.path.dirname(os.path.realpath(__file__))
 entry_path = os.path.join(file_directory, 'verdict')
 
-major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X"]]
+major_contigs_order = VERDICT_CONTIGS
+
+
+def get_resources(args):
+    """Resolve the CNA resource file names once and cache them on args."""
+    if getattr(args, 'cna_resources', None) is None:
+        resources = resolve_cna_resources(args.cna_resource_dir)
+        if resources['errors']:
+            sys.exit("[ERROR] Cannot use the CNA resource directory {}: {}. Please check docs/verdict.md for the "
+                     "expected layout.".format(args.cna_resource_dir, '; '.join(resources['errors'])))
+        args.cna_resources = resources
+    return args.cna_resources
 
 
 def get_contigs(args):
@@ -59,7 +72,7 @@ def tumor_allele_counter_command(args):
     command = f'{args.parallel} -j{args.threads} '
     command += f'LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{args.allele_counter}/lib" {args.allele_counter}/bin/alleleCounter '
     command += f'-b {args.tumor_bam_fn} '
-    command += f'-l {args.cna_resource_dir}/loci_files/G1000_loci_hg38_{{1}}.txt '
+    command += f'-l {get_resources(args)["loci_prefix"]}{{1}}.txt '
     command += f'-o {args.output_dir}/{args.tumor_sample_name}_AlleleCount_{{1}}.txt '
     command += '-m 20 '
     command += '-q 20 '
@@ -77,7 +90,7 @@ def normal_allele_counter_command(args):
     command = f'{args.parallel} -j{args.threads} '
     command += f'LD_LIBRARY_PATH="$LD_LIBRARY_PATH:{args.allele_counter}/lib" {args.allele_counter}/bin/alleleCounter '
     command += f'-b {args.normal_bam_fn} '
-    command += f'-l {args.cna_resource_dir}/loci_files/G1000_loci_hg38_{{1}}.txt '
+    command += f'-l {get_resources(args)["loci_prefix"]}{{1}}.txt '
     command += f'-o {args.output_dir}/{args.normal_sample_name}_AlleleCount_{{1}}.txt '
     command += '-m 20 '
     command += '-q 20 '
@@ -92,7 +105,7 @@ def normal_allele_counter_command(args):
 def get_logr_baf_command(args):
     command = f'{args.python} {args.verdict}/get_logr_and_baf.py '
     command += f'--tumor_allele_counts_file_prefix {args.output_dir}/{args.tumor_sample_name}_AlleleCount_ '
-    command += f'--alleles_file_prefix {args.cna_resource_dir}/allele_files/G1000_alleles_hg38_ '
+    command += f'--alleles_file_prefix {get_resources(args)["alleles_prefix"]} '
     command += f'--tumor_logr_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR.txt '
     command += f'--tumor_baf_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_BAF.txt '
     command += f'--sample_name {args.tumor_sample_name} '
@@ -104,8 +117,13 @@ def get_logr_baf_command(args):
 def correct_logr_command(args):
     command = f'{args.python} {args.verdict}/correct_logr.py '
     command += f'--tumor_logr_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR.txt '
-    command += f'--gc_content_file {args.cna_resource_dir}/GC_G1000_hg38.txt '
-    command += f'--replication_timing_file {args.cna_resource_dir}/RT_G1000_hg38.txt '
+    resources = get_resources(args)
+    command += f'--gc_content_file {resources["gc_file"]} '
+    if resources['rt_file'] is not None:
+        command += f'--replication_timing_file {resources["rt_file"]} '
+        print("[INFO] Verdict LogR correction: GC content and replication timing ({})".format(resources['rt_file']))
+    else:
+        print("[INFO] Verdict LogR correction: GC content only (no RT_*.txt in {})".format(args.cna_resource_dir))
     command += f'--tumor_logr_correction_output_file {args.output_dir}/{args.tumor_sample_name}_Tumor_LogR_Correction.txt '
     command += f'--sample_name {args.tumor_sample_name}'
 
