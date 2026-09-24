@@ -11,7 +11,8 @@ Verdict itself is not tied to an assembly, but its resources are. It needs, for 
 BAM was aligned to, a set of common germline SNP sites (the ASCAT "G1000" loci and allele files), the GC
 content around those sites and, optionally, their replication timing. ClairS-TO ships such a set for
 GRCh38 (`reference_files.tar.gz`, see the README). To run Verdict against another assembly, build the
-equivalent set and point `--cna_resource_dir` at it.
+equivalent set and point `--cna_resource_dir` at it. The assembly must name its contigs `chr1`..`chr22`
+and `chrX`, as GRCh38 and T2T-CHM13 do; Verdict uses those contigs only.
 
 Contig names alone cannot tell two assemblies apart: T2T-CHM13 uses the same `chr1`..`chrX` names as
 GRCh38, so the GRCh38 resources would otherwise be accepted and applied to coordinates they do not

@@ -163,8 +163,8 @@ def unreadable_resource_files(resources, contigs):
     """Return the resource files that exist but that this process cannot open for reading.
 
     Existence is not enough. The reference files ship mode 0640, so a container started under a
-    different uid -- which is what `docker run -u $(id -u):$(id -g)` gives, and what nf-core's
-    docker profile does -- can stat them but not read them. Undetected that costs an hour: every
+    different uid -- which is what `docker run -u $(id -u):$(id -g)` gives -- can stat them but
+    not read them. Undetected that costs an hour: every
     other check here passes, Verdict stays enabled, and the run fails much later inside
     alleleCounter, which reports a file it cannot open as one that "does not appear to exist".
     """

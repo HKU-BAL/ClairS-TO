@@ -319,7 +319,7 @@ def check_cna_resources(args, verdict_contigs, contig_length_by_name):
         logging(log_warning(
             "[WARNING] CNA Verdict resource file(s) under {} exist but cannot be read (e.g. {}). "
             "The reference files ship mode 0640, so a container started under a different uid "
-            "(`docker run -u $(id -u):$(id -g)`, as nf-core's docker profile does) can stat them "
+            "(e.g. `docker run -u $(id -u):$(id -g)`) can stat them "
             "but not open them. Make them world-readable in the image "
             "(`chmod -R a+rX $CONDA_PREFIX/bin/clairs-to_cna_data`), pass a readable set via "
             "--cna_resource_dir, or use --disable_verdict. Disabling Verdict for this run.".format(
