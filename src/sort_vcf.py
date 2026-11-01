@@ -44,8 +44,8 @@ major_contigs_order = ["chr" + str(a) for a in list(range(1, 23)) + ["X", "Y"]] 
 def compress_index_vcf(input_vcf):
     # use bgzip to compress vcf -> vcf.gz
     # use tabix to index vcf.gz
-    proc = subprocess.run('bgzip -f {}'.format(input_vcf), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    proc = subprocess.run('tabix -f -p vcf {}.gz'.format(input_vcf), shell=True, stdout=subprocess.PIPE,
+    proc = subprocess.run(['bgzip', '-f', input_vcf], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(['tabix', '-f', '-p', 'vcf', input_vcf + '.gz'], stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
 
 
