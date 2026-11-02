@@ -54,8 +54,8 @@ def delete_lines_after(target_str, delimiter):
 def compress_index_vcf(input_vcf):
     # use bgzip to compress vcf -> vcf.gz
     # use tabix to index vcf.gz
-    proc = subprocess.run('bgzip -f {}'.format(input_vcf), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    proc = subprocess.run('tabix -f -p vcf {}.gz'.format(input_vcf), shell=True, stdout=subprocess.PIPE,
+    proc = subprocess.run(['bgzip', '-f', input_vcf], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(['tabix', '-f', '-p', 'vcf', input_vcf + '.gz'], stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
 
 def mark_low_qual(row, platform, quality_score_for_pass, quality_score_for_pass_phaseable, quality_score_for_pass_unphaseable):
