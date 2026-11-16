@@ -399,6 +399,8 @@ docker run -it hkubal/clairs-to:latest /opt/bin/run_clairs_to --help
                         Disable non-somatic variants tagging and ignore `--panel_of_normals`.
   --disable_verdict
                         Disable using verdict to tag the variants in CNA regions. We suggest using the parameter only for sample with tumor purity estimation lower than 0.8. Default: Enabled.                                    
+  --cna_resource_dir PATH
+                        Directory of the CNA reference resources used by Verdict (per-contig loci and allele files, GC content and, optionally, replication timing). The resources must be built on the reference genome the input BAM was aligned to. Default: `${CONDA_PREFIX}/bin/clairs-to_cna_data/reference_files` (GRCh38). Use this option to run Verdict against another assembly such as T2T-CHM13, please check [here](docs/verdict.md#using-verdict-with-another-reference-eg-t2t-chm13) for the required layout.
 ```
 
 #### Call Variants in one or multiple chromosomes using the `-C/--ctg_name` parameter
